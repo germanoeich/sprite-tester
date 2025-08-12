@@ -26,7 +26,8 @@ export function useCanvasInteraction(
     removeTile: null as any,
     addObject: null as any,
     setSelection: null as any,
-    setPanning: null as any
+    setPanning: null as any,
+    updateObject: null as any
   });
   
   // Update refs when state changes
@@ -45,6 +46,7 @@ export function useCanvasInteraction(
   actionsRef.current.addObject = useEditorStore(state => state.addObject);
   actionsRef.current.setSelection = useEditorStore(state => state.setSelection);
   actionsRef.current.setPanning = useEditorStore(state => state.setPanning);
+  actionsRef.current.updateObject = useEditorStore(state => state.updateObject);
 
   const getWorldPos = useCallback((e: MouseEvent) => {
     const canvas = canvasRef.current;
@@ -61,6 +63,8 @@ export function useCanvasInteraction(
     
     let isPanning = false;
     let panStart = { x: 0, y: 0 };
+    let isDraggingObject = false;
+    let draggedObject: { layerId: string; objectId: string; startX: number; startY: number; offsetX: number; offsetY: number } | null = null;
 
     const handleMouseDown = (e: MouseEvent) => {
       const worldPos = getWorldPos(e);
@@ -88,6 +92,16 @@ export function useCanvasInteraction(
                 const dy = Math.abs(worldPos.y - obj.y);
                 if (dx < stateRef.current.ppu / 2 && dy < stateRef.current.ppu / 2) {
                   actionsRef.current.setSelection({ layerId: layer.id, objectId: obj.id });
+                  // Start dragging the object
+                  isDraggingObject = true;
+                  draggedObject = {
+                    layerId: layer.id,
+                    objectId: obj.id,
+                    startX: obj.x,
+                    startY: obj.y,
+                    offsetX: worldPos.x - obj.x,
+                    offsetY: worldPos.y - obj.y
+                  };
                   found = true;
                   break;
                 }
@@ -174,6 +188,25 @@ export function useCanvasInteraction(
         const dy = (e.clientY - panStart.y) / stateRef.current.camera.zoom;
         actionsRef.current.panCamera(-dx, -dy);
         panStart = { x: e.clientX, y: e.clientY };
+      } else if (isDraggingObject && draggedObject) {
+        // Move the selected object
+        const worldPos = getWorldPos(e);
+        const newX = worldPos.x - draggedObject.offsetX;
+        const newY = worldPos.y - draggedObject.offsetY;
+        
+        // Apply snap to grid if enabled
+        const finalX = stateRef.current.snapToGridEnabled 
+          ? snapToGrid(newX, stateRef.current.ppu) 
+          : newX;
+        const finalY = stateRef.current.snapToGridEnabled 
+          ? snapToGrid(newY, stateRef.current.ppu) 
+          : newY;
+        
+        actionsRef.current.updateObject(
+          draggedObject.layerId, 
+          draggedObject.objectId, 
+          { x: finalX, y: finalY }
+        );
       }
       
       // Continue tile painting/erasing if mouse is down
@@ -186,6 +219,10 @@ export function useCanvasInteraction(
       if (isPanning) {
         isPanning = false;
         actionsRef.current.setPanning(false);
+      }
+      if (isDraggingObject) {
+        isDraggingObject = false;
+        draggedObject = null;
       }
     };
     
