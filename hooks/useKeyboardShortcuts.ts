@@ -23,6 +23,12 @@ export function useKeyboardShortcuts() {
         case '3':
           setMode('erase');
           break;
+        case '4':
+          setMode('text');
+          break;
+        case '5':
+          setMode('arrow');
+          break;
         case 'g':
         case 'G':
           if (!e.ctrlKey && !e.metaKey) {

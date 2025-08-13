@@ -3,6 +3,41 @@ import { useEditorStore } from '@/lib/state/store';
 import { CanvasRenderer } from '@/lib/canvas/renderer';
 import { screenToWorld, snapToGrid } from '@/lib/utils/geometry';
 import { generateId } from '@/lib/utils/id';
+import { TextPlacedObject, ArrowPlacedObject } from '@/types';
+
+// Helper function to calculate distance from point to line segment
+function pointToLineDistance(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+  const A = px - x1;
+  const B = py - y1;
+  const C = x2 - x1;
+  const D = y2 - y1;
+  
+  const dot = A * C + B * D;
+  const lenSq = C * C + D * D;
+  let param = -1;
+  
+  if (lenSq !== 0) {
+    param = dot / lenSq;
+  }
+  
+  let xx, yy;
+  
+  if (param < 0) {
+    xx = x1;
+    yy = y1;
+  } else if (param > 1) {
+    xx = x2;
+    yy = y2;
+  } else {
+    xx = x1 + param * C;
+    yy = y1 + param * D;
+  }
+  
+  const dx = px - xx;
+  const dy = py - yy;
+  
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
 export function useCanvasInteraction(
   canvasRef: RefObject<HTMLCanvasElement | null>,
@@ -18,7 +53,10 @@ export function useCanvasInteraction(
     layers: [] as any[],
     selectedAssetId: null as any,
     gameResolution: { enabled: false, width: 480, height: 270 } as any,
-    assets: [] as any[]
+    assets: [] as any[],
+    textSettings: { fontSize: 16, color: '#FFFFFF' } as any,
+    arrowSettings: { color: '#FFFFFF', strokeWidth: 2 } as any,
+    drawingArrow: null as any
   });
   
   const actionsRef = useRef({
@@ -29,7 +67,8 @@ export function useCanvasInteraction(
     addObject: null as any,
     setSelection: null as any,
     setPanning: null as any,
-    updateObject: null as any
+    updateObject: null as any,
+    setDrawingArrow: null as any
   });
   
   // Update refs when state changes
@@ -42,6 +81,9 @@ export function useCanvasInteraction(
   stateRef.current.selectedAssetId = useEditorStore(state => state.selectedAssetId);
   stateRef.current.gameResolution = useEditorStore(state => state.gameResolution);
   stateRef.current.assets = useEditorStore(state => state.assets);
+  stateRef.current.textSettings = useEditorStore(state => state.textSettings);
+  stateRef.current.arrowSettings = useEditorStore(state => state.arrowSettings);
+  stateRef.current.drawingArrow = useEditorStore(state => state.drawingArrow);
   
   actionsRef.current.panCamera = useEditorStore(state => state.panCamera);
   actionsRef.current.zoomCamera = useEditorStore(state => state.zoomCamera);
@@ -51,6 +93,7 @@ export function useCanvasInteraction(
   actionsRef.current.setSelection = useEditorStore(state => state.setSelection);
   actionsRef.current.setPanning = useEditorStore(state => state.setPanning);
   actionsRef.current.updateObject = useEditorStore(state => state.updateObject);
+  actionsRef.current.setDrawingArrow = useEditorStore(state => state.setDrawingArrow);
   
   const removeObject = useEditorStore(state => state.removeObject);
   const selection = useEditorStore(state => state.selection);
@@ -95,22 +138,43 @@ export function useCanvasInteraction(
             if (layer.type === 'object' && layer.visible && !layer.locked) {
               const objLayer = layer as any;
               for (const obj of objLayer.objects) {
-                // Get the asset to determine actual sprite size
-                const asset = stateRef.current.assets.find(a => a.id === obj.assetId);
+                let isHit = false;
                 
-                let halfWidth = stateRef.current.ppu / 2;
-                let halfHeight = stateRef.current.ppu / 2;
-                
-                if (asset && asset.type === 'sprite') {
-                  const meta = asset.meta as any;
-                  halfWidth = (meta.frameW * obj.scale) / 2;
-                  halfHeight = (meta.frameH * obj.scale) / 2;
+                if (obj.type === 'sprite') {
+                  // Get the asset to determine actual sprite size
+                  const asset = stateRef.current.assets.find(a => a.id === obj.assetId);
+                  
+                  let halfWidth = stateRef.current.ppu / 2;
+                  let halfHeight = stateRef.current.ppu / 2;
+                  
+                  if (asset && asset.type === 'sprite') {
+                    const meta = asset.meta as any;
+                    halfWidth = (meta.frameW * obj.scale) / 2;
+                    halfHeight = (meta.frameH * obj.scale) / 2;
+                  }
+                  
+                  const dx = Math.abs(worldPos.x - obj.x);
+                  const dy = Math.abs(worldPos.y - obj.y);
+                  isHit = dx < halfWidth && dy < halfHeight;
+                } else if (obj.type === 'text') {
+                  // Approximate text bounds
+                  const textObj = obj as TextPlacedObject;
+                  const approxWidth = textObj.text.length * textObj.fontSize * 0.6;
+                  const dx = Math.abs(worldPos.x - obj.x);
+                  const dy = Math.abs(worldPos.y - obj.y);
+                  isHit = dx < approxWidth / 2 && dy < textObj.fontSize / 2;
+                } else if (obj.type === 'arrow') {
+                  // Check if click is near arrow line
+                  const arrowObj = obj as ArrowPlacedObject;
+                  const dist = pointToLineDistance(
+                    worldPos.x, worldPos.y,
+                    arrowObj.x, arrowObj.y,
+                    arrowObj.endX, arrowObj.endY
+                  );
+                  isHit = dist < 10;
                 }
                 
-                const dx = Math.abs(worldPos.x - obj.x);
-                const dy = Math.abs(worldPos.y - obj.y);
-                
-                if (dx < halfWidth && dy < halfHeight) {
+                if (isHit) {
                   actionsRef.current.setSelection({ layerId: layer.id, objectId: obj.id });
                   // Start dragging the object
                   isDraggingObject = true;
@@ -183,6 +247,7 @@ export function useCanvasInteraction(
               
               actionsRef.current.addObject(objLayer.id, {
                 id: generateId(),
+                type: 'sprite',
                 assetId: selectedAssetId,
                 x: pos.x,
                 y: pos.y,
@@ -203,6 +268,53 @@ export function useCanvasInteraction(
           const gridX = Math.floor(worldPos.x / stateRef.current.ppu);
           const gridY = Math.floor(worldPos.y / stateRef.current.ppu);
           actionsRef.current.removeTile(tileLayer.id, gridX, gridY);
+          break;
+        }
+        
+        case 'text': {
+          // Prompt for text content
+          const text = prompt('Enter text:');
+          if (!text) return;
+          
+          const objLayer = stateRef.current.layers.find(l => l.type === 'object' && l.visible && !l.locked);
+          if (!objLayer) {
+            console.log('No object layer found');
+            return;
+          }
+          
+          const shouldSnap = e.altKey ? !stateRef.current.snapToGridEnabled : stateRef.current.snapToGridEnabled;
+          const pos = shouldSnap 
+            ? { x: snapToGrid(worldPos.x, stateRef.current.ppu), y: snapToGrid(worldPos.y, stateRef.current.ppu) }
+            : worldPos;
+          
+          const textObject: TextPlacedObject = {
+            id: generateId(),
+            type: 'text',
+            x: pos.x,
+            y: pos.y,
+            text: text,
+            fontSize: stateRef.current.textSettings.fontSize,
+            color: stateRef.current.textSettings.color
+          };
+          
+          actionsRef.current.addObject(objLayer.id, textObject);
+          break;
+        }
+        
+        case 'arrow': {
+          const objLayer = stateRef.current.layers.find(l => l.type === 'object' && l.visible && !l.locked);
+          if (!objLayer) {
+            console.log('No object layer found');
+            return;
+          }
+          
+          // Start drawing arrow
+          actionsRef.current.setDrawingArrow({
+            startX: worldPos.x,
+            startY: worldPos.y,
+            endX: worldPos.x,
+            endY: worldPos.y
+          });
           break;
         }
         
@@ -275,6 +387,14 @@ export function useCanvasInteraction(
           if (tileBrush.tilesetId && tileBrush.indices.length > 0) {
             handleMouseDown(e);
           }
+        } else if (mode === 'arrow' && stateRef.current.drawingArrow) {
+          // Update arrow end position while dragging
+          const worldPos = getWorldPos(e);
+          actionsRef.current.setDrawingArrow({
+            ...stateRef.current.drawingArrow,
+            endX: worldPos.x,
+            endY: worldPos.y
+          });
         }
       }
     };
@@ -287,6 +407,28 @@ export function useCanvasInteraction(
       if (isDraggingObject) {
         isDraggingObject = false;
         draggedObject = null;
+      }
+      
+      // Complete arrow drawing
+      if (stateRef.current.mode === 'arrow' && stateRef.current.drawingArrow) {
+        const objLayer = stateRef.current.layers.find(l => l.type === 'object' && l.visible && !l.locked);
+        if (objLayer) {
+          const arrow = stateRef.current.drawingArrow;
+          
+          const arrowObject: ArrowPlacedObject = {
+            id: generateId(),
+            type: 'arrow',
+            x: arrow.startX,
+            y: arrow.startY,
+            endX: arrow.endX,
+            endY: arrow.endY,
+            color: stateRef.current.arrowSettings.color,
+            strokeWidth: stateRef.current.arrowSettings.strokeWidth
+          };
+          
+          actionsRef.current.addObject(objLayer.id, arrowObject);
+        }
+        actionsRef.current.setDrawingArrow(null);
       }
     };
     

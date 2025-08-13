@@ -9,6 +9,8 @@ const modes: { value: EditorMode; label: string; key: string }[] = [
   { value: 'select', label: 'Select (1)', key: '1' },
   { value: 'place', label: 'Place (2)', key: '2' },
   { value: 'erase', label: 'Erase (3)', key: '3' },
+  { value: 'text', label: 'Text (4)', key: '4' },
+  { value: 'arrow', label: 'Arrow (5)', key: '5' },
 ];
 
 export const ModeSelector: FC = () => {

@@ -1,4 +1,4 @@
-export type EditorMode = 'select' | 'place' | 'erase';
+export type EditorMode = 'select' | 'place' | 'erase' | 'text' | 'arrow';
 export type AssetType = 'sprite' | 'tileset';
 export type AssetTab = 'sprite' | 'tileset';
 export type LayerType = 'tile' | 'object';
@@ -67,16 +67,40 @@ export interface ObjectLayer extends Layer {
   objects: PlacedObject[];
 }
 
-export interface PlacedObject {
+export type PlacedObjectType = 'sprite' | 'text' | 'arrow';
+
+export interface BasePlacedObject {
   id: string;
-  assetId: string;
+  type: PlacedObjectType;
   x: number;
   y: number;
+}
+
+export interface SpritePlacedObject extends BasePlacedObject {
+  type: 'sprite';
+  assetId: string;
   scale: number;
   rot: number;
   frame: number;
   t: number;
 }
+
+export interface TextPlacedObject extends BasePlacedObject {
+  type: 'text';
+  text: string;
+  fontSize: number;
+  color: string;
+}
+
+export interface ArrowPlacedObject extends BasePlacedObject {
+  type: 'arrow';
+  endX: number;
+  endY: number;
+  color: string;
+  strokeWidth: number;
+}
+
+export type PlacedObject = SpritePlacedObject | TextPlacedObject | ArrowPlacedObject;
 
 export interface TileBrush {
   tilesetId: string | null;
@@ -114,6 +138,23 @@ export interface PaletteDragSelect {
   endRow: number;
 }
 
+export interface TextSettings {
+  fontSize: number;
+  color: string;
+}
+
+export interface ArrowSettings {
+  color: string;
+  strokeWidth: number;
+}
+
+export interface DrawingArrow {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+}
+
 export interface EditorState {
   // Editor Settings
   ppu: number;
@@ -147,4 +188,13 @@ export interface EditorState {
   paletteCamera: PaletteCamera;
   paletteDragSelect: PaletteDragSelect | null;
   palettePanning: boolean;
+  
+  // Text settings
+  textSettings: TextSettings;
+  
+  // Arrow settings
+  arrowSettings: ArrowSettings;
+  
+  // Drawing state
+  drawingArrow: DrawingArrow | null;
 }

@@ -12,6 +12,7 @@ import { openFileDialog } from '@/lib/utils/file';
 import { generateId } from '@/lib/utils/id';
 import { showToast } from '@/components/ui/Toast';
 import { assetManager } from '@/lib/utils/assetManager';
+import { clearLocalStorage } from '@/lib/utils/localStorage';
 
 export const Toolbar: FC = () => {
   const gridVisible = useEditorStore(state => state.gridVisible);
@@ -121,6 +122,15 @@ export const Toolbar: FC = () => {
     }
   };
 
+  const handleClearStorage = () => {
+    if (confirm('This will clear your saved work and reload the page. Continue?')) {
+      clearLocalStorage();
+      showToast('Storage cleared', 'success');
+      // Reload the page to reset the state
+      setTimeout(() => window.location.reload(), 500);
+    }
+  };
+
   return (
     <header className="toolbar grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-3 py-2 bg-gradient-to-b from-[#0f121a] to-[#0b0d12] border-b border-[#1f2535]">
       {/* Left section - Brand */}
@@ -170,6 +180,9 @@ export const Toolbar: FC = () => {
         </Button>
         <Button variant="default" size="small" onClick={handleExport}>
           Export Scene
+        </Button>
+        <Button variant="ghost" size="small" onClick={handleClearStorage} title="Clear saved work from browser">
+          Clear Storage
         </Button>
       </div>
     </header>

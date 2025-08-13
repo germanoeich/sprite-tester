@@ -122,13 +122,25 @@ export async function importScene(file: File): Promise<Partial<EditorState>> {
         grid
       } as TileLayer;
     } else {
+      // Process objects to ensure they have the correct type field
+      const objects = (layer.data.objects || []).map((obj: any) => {
+        // If object doesn't have a type, it's a legacy sprite object
+        if (!obj.type) {
+          return {
+            ...obj,
+            type: 'sprite'
+          };
+        }
+        return obj;
+      });
+      
       return {
         id: layer.id,
         name: layer.name,
         type: 'object',
         visible: layer.visible,
         locked: layer.locked,
-        objects: layer.data.objects || []
+        objects
       } as ObjectLayer;
     }
   });

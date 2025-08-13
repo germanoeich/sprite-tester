@@ -4,6 +4,7 @@ import { FC } from 'react';
 import { useEditorStore } from '@/lib/state/store';
 import { Field } from '@/components/ui/Field';
 import { assetManager } from '@/lib/utils/assetManager';
+import { TextPlacedObject, ArrowPlacedObject, SpritePlacedObject } from '@/types';
 
 export const InspectorPanel: FC = () => {
   const selectedAssetId = useEditorStore(state => state.selectedAssetId);
@@ -15,6 +16,11 @@ export const InspectorPanel: FC = () => {
   const setSelection = useEditorStore(state => state.setSelection);
   const removeAsset = useEditorStore(state => state.removeAsset);
   const setSelectedAssetId = useEditorStore(state => state.setSelectedAssetId);
+  const mode = useEditorStore(state => state.mode);
+  const textSettings = useEditorStore(state => state.textSettings);
+  const arrowSettings = useEditorStore(state => state.arrowSettings);
+  const setTextSettings = useEditorStore(state => state.setTextSettings);
+  const setArrowSettings = useEditorStore(state => state.setArrowSettings);
   
   const selectedAsset = assets.find(a => a.id === selectedAssetId);
 
@@ -165,7 +171,7 @@ export const InspectorPanel: FC = () => {
       return <div className="text-[--muted] text-sm">Object not found</div>;
     }
 
-    const updateObjectProperty = (property: string, value: number) => {
+    const updateObjectProperty = (property: string, value: any) => {
       const layer = layers.find(l => l.id === selection.layerId);
       if (layer && layer.type === 'object') {
         const updateObject = useEditorStore.getState().updateObject;
@@ -173,47 +179,200 @@ export const InspectorPanel: FC = () => {
       }
     };
 
-    return (
-      <div className="grid gap-3">
-        <h3 className="font-semibold">Object Properties</h3>
-        <Field 
-          label="X" 
-          type="number" 
-          value={object.x} 
-          onChange={(e) => updateObjectProperty('x', parseFloat(e.target.value) || 0)}
-        />
-        <Field 
-          label="Y" 
-          type="number" 
-          value={object.y} 
-          onChange={(e) => updateObjectProperty('y', parseFloat(e.target.value) || 0)}
-        />
-        <Field 
-          label="Scale" 
-          type="number" 
-          value={object.scale} 
-          step="0.1"
-          min="0.1"
-          max="10"
-          onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value) || 1)}
-        />
-        <Field 
-          label="Rotation (deg)" 
-          type="number" 
-          value={Math.round(object.rot * 180 / Math.PI)} 
-          onChange={(e) => updateObjectProperty('rot', (parseFloat(e.target.value) || 0) * Math.PI / 180)}
-        />
-        <button
-          onClick={() => {
-            removeObject(selection.layerId, selection.objectId);
-            setSelection(null);
-          }}
-          className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition-colors"
-        >
-          Delete Object (Del)
-        </button>
-      </div>
-    );
+    // Render different UI based on object type
+    if (object.type === 'text') {
+      const textObj = object as TextPlacedObject;
+      return (
+        <div className="grid gap-3">
+          <h3 className="font-semibold">Text Object Properties</h3>
+          <Field 
+            label="Text" 
+            type="text" 
+            value={textObj.text} 
+            onChange={(e) => updateObjectProperty('text', e.target.value)}
+          />
+          <Field 
+            label="X" 
+            type="number" 
+            value={textObj.x} 
+            onChange={(e) => updateObjectProperty('x', parseFloat(e.target.value) || 0)}
+          />
+          <Field 
+            label="Y" 
+            type="number" 
+            value={textObj.y} 
+            onChange={(e) => updateObjectProperty('y', parseFloat(e.target.value) || 0)}
+          />
+          <Field 
+            label="Font Size" 
+            type="number" 
+            value={textObj.fontSize} 
+            min="8"
+            max="72"
+            onChange={(e) => updateObjectProperty('fontSize', parseInt(e.target.value) || 16)}
+          />
+          <Field 
+            label="Color" 
+            type="color" 
+            value={textObj.color} 
+            onChange={(e) => updateObjectProperty('color', e.target.value)}
+          />
+          <button
+            onClick={() => {
+              removeObject(selection.layerId, selection.objectId);
+              setSelection(null);
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition-colors"
+          >
+            Delete Text
+          </button>
+        </div>
+      );
+    } else if (object.type === 'arrow') {
+      const arrowObj = object as ArrowPlacedObject;
+      return (
+        <div className="grid gap-3">
+          <h3 className="font-semibold">Arrow Object Properties</h3>
+          <Field 
+            label="Start X" 
+            type="number" 
+            value={arrowObj.x} 
+            onChange={(e) => updateObjectProperty('x', parseFloat(e.target.value) || 0)}
+          />
+          <Field 
+            label="Start Y" 
+            type="number" 
+            value={arrowObj.y} 
+            onChange={(e) => updateObjectProperty('y', parseFloat(e.target.value) || 0)}
+          />
+          <Field 
+            label="End X" 
+            type="number" 
+            value={arrowObj.endX} 
+            onChange={(e) => updateObjectProperty('endX', parseFloat(e.target.value) || 0)}
+          />
+          <Field 
+            label="End Y" 
+            type="number" 
+            value={arrowObj.endY} 
+            onChange={(e) => updateObjectProperty('endY', parseFloat(e.target.value) || 0)}
+          />
+          <Field 
+            label="Color" 
+            type="color" 
+            value={arrowObj.color} 
+            onChange={(e) => updateObjectProperty('color', e.target.value)}
+          />
+          <Field 
+            label="Stroke Width" 
+            type="number" 
+            value={arrowObj.strokeWidth} 
+            min="1"
+            max="10"
+            onChange={(e) => updateObjectProperty('strokeWidth', parseInt(e.target.value) || 2)}
+          />
+          <button
+            onClick={() => {
+              removeObject(selection.layerId, selection.objectId);
+              setSelection(null);
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition-colors"
+          >
+            Delete Arrow
+          </button>
+        </div>
+      );
+    } else {
+      // Sprite object
+      const spriteObj = object as SpritePlacedObject;
+      return (
+        <div className="grid gap-3">
+          <h3 className="font-semibold">Sprite Object Properties</h3>
+          <Field 
+            label="X" 
+            type="number" 
+            value={spriteObj.x} 
+            onChange={(e) => updateObjectProperty('x', parseFloat(e.target.value) || 0)}
+          />
+          <Field 
+            label="Y" 
+            type="number" 
+            value={spriteObj.y} 
+            onChange={(e) => updateObjectProperty('y', parseFloat(e.target.value) || 0)}
+          />
+          <Field 
+            label="Scale" 
+            type="number" 
+            value={spriteObj.scale} 
+            step="0.1"
+            min="0.1"
+            max="10"
+            onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value) || 1)}
+          />
+          <Field 
+            label="Rotation (deg)" 
+            type="number" 
+            value={Math.round(spriteObj.rot * 180 / Math.PI)} 
+            onChange={(e) => updateObjectProperty('rot', (parseFloat(e.target.value) || 0) * Math.PI / 180)}
+          />
+          <button
+            onClick={() => {
+              removeObject(selection.layerId, selection.objectId);
+              setSelection(null);
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition-colors"
+          >
+            Delete Object (Del)
+          </button>
+        </div>
+      );
+    }
+  };
+
+  // Render mode-specific settings
+  const renderModeSettings = () => {
+    if (mode === 'text') {
+      return (
+        <div className="grid gap-3">
+          <h3 className="font-semibold">Text Settings</h3>
+          <Field 
+            label="Font Size" 
+            type="number" 
+            value={textSettings.fontSize} 
+            min="8"
+            max="72"
+            onChange={(e) => setTextSettings({ fontSize: parseInt(e.target.value) || 16 })}
+          />
+          <Field 
+            label="Color" 
+            type="color" 
+            value={textSettings.color} 
+            onChange={(e) => setTextSettings({ color: e.target.value })}
+          />
+        </div>
+      );
+    } else if (mode === 'arrow') {
+      return (
+        <div className="grid gap-3">
+          <h3 className="font-semibold">Arrow Settings</h3>
+          <Field 
+            label="Color" 
+            type="color" 
+            value={arrowSettings.color} 
+            onChange={(e) => setArrowSettings({ color: e.target.value })}
+          />
+          <Field 
+            label="Stroke Width" 
+            type="number" 
+            value={arrowSettings.strokeWidth} 
+            min="1"
+            max="10"
+            onChange={(e) => setArrowSettings({ strokeWidth: parseInt(e.target.value) || 2 })}
+          />
+        </div>
+      );
+    }
+    return null;
   };
 
   return (
@@ -223,7 +382,7 @@ export const InspectorPanel: FC = () => {
       </div>
       
       <div className="inspector p-3 overflow-y-auto">
-        {selection ? renderObjectInspector() : renderAssetInspector()}
+        {selection ? renderObjectInspector() : (mode === 'text' || mode === 'arrow') ? renderModeSettings() : renderAssetInspector()}
       </div>
     </div>
   );

@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { subscribeWithSelector } from 'zustand/middleware';
 import { enableMapSet } from 'immer';
 import { assetManager } from '@/lib/utils/assetManager';
+import { saveToLocalStorage } from '@/lib/utils/localStorage';
 import type { 
   EditorState, 
   Asset, 
@@ -10,10 +12,14 @@ import type {
   TileLayer, 
   ObjectLayer, 
   PlacedObject,
+  TextPlacedObject,
+  ArrowPlacedObject,
   EditorMode,
   AssetTab,
   Selection,
-  DragState
+  DragState,
+  TextSettings,
+  ArrowSettings
 } from '@/types';
 
 // Enable MapSet plugin for Immer to handle Maps and Sets
@@ -27,6 +33,13 @@ interface EditorActions {
   toggleSnapToGrid: () => void;
   toggleGameResolution: () => void;
   setGameResolution: (width: number, height: number) => void;
+  
+  // Text settings actions
+  setTextSettings: (settings: Partial<TextSettings>) => void;
+  
+  // Arrow settings actions
+  setArrowSettings: (settings: Partial<ArrowSettings>) => void;
+  setDrawingArrow: (arrow: { startX: number; startY: number; endX: number; endY: number } | null) => void;
   
   // Asset actions
   addAsset: (asset: Asset) => void;
@@ -153,10 +166,25 @@ const initialState: EditorState = {
     zoom: 2
   },
   paletteDragSelect: null,
-  palettePanning: false
+  palettePanning: false,
+  
+  // Text settings
+  textSettings: {
+    fontSize: 16,
+    color: '#FFFFFF'
+  },
+  
+  // Arrow settings
+  arrowSettings: {
+    color: '#FFFFFF',
+    strokeWidth: 2
+  },
+  
+  // Drawing state
+  drawingArrow: null
 };
 
-export const useEditorStore = create<EditorStore>()(
+export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
   devtools(
     immer((set, get) => ({
       ...initialState,
@@ -187,6 +215,20 @@ export const useEditorStore = create<EditorStore>()(
         state.gameResolution.height = height;
       }),
       
+      // Text settings actions
+      setTextSettings: (settings) => set((state) => {
+        Object.assign(state.textSettings, settings);
+      }),
+      
+      // Arrow settings actions
+      setArrowSettings: (settings) => set((state) => {
+        Object.assign(state.arrowSettings, settings);
+      }),
+      
+      setDrawingArrow: (arrow) => set((state) => {
+        state.drawingArrow = arrow;
+      }),
+      
       // Asset actions
       addAsset: (asset) => set((state) => {
         // Don't directly mutate HTMLImageElement with Immer
@@ -204,11 +246,18 @@ export const useEditorStore = create<EditorStore>()(
         // Remove from assetManager
         assetManager.removeImage(id);
         
-        // Remove all objects that use this asset
+        // Remove all sprite objects that use this asset
         state.layers.forEach(layer => {
           if (layer.type === 'object') {
             const objLayer = layer as ObjectLayer;
-            objLayer.objects = objLayer.objects.filter(obj => obj.assetId !== id);
+            objLayer.objects = objLayer.objects.filter(obj => {
+              // Only check assetId for sprite objects
+              if (obj.type === 'sprite') {
+                return obj.assetId !== id;
+              }
+              // Keep text and arrow objects
+              return true;
+            });
           }
         });
         
@@ -439,5 +488,37 @@ export const useEditorStore = create<EditorStore>()(
         }
       })
     }))
-  )
+  ))
+);
+
+// Auto-save to localStorage on state changes (debounced)
+let saveTimeout: NodeJS.Timeout | null = null;
+
+useEditorStore.subscribe(
+  (state) => ({
+    ppu: state.ppu,
+    gridVisible: state.gridVisible,
+    snapToGrid: state.snapToGrid,
+    gameResolution: state.gameResolution,
+    assets: state.assets,
+    layers: state.layers,
+    camera: state.camera,
+    textSettings: state.textSettings,
+    arrowSettings: state.arrowSettings
+  }),
+  (current) => {
+    // Clear existing timeout
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+    
+    // Save after 1 second of inactivity
+    saveTimeout = setTimeout(() => {
+      saveToLocalStorage(current);
+      console.log('Auto-saved to localStorage');
+    }, 1000);
+  },
+  {
+    equalityFn: (a, b) => false // Always trigger save on any change
+  }
 );

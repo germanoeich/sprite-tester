@@ -1,4 +1,4 @@
-import { Camera, Layer, TileLayer, ObjectLayer, Asset, GameResolution, Selection, EditorMode, TileBrush, TilesetMetadata } from '@/types';
+import { Camera, Layer, TileLayer, ObjectLayer, Asset, GameResolution, Selection, EditorMode, TileBrush, TilesetMetadata, PlacedObject, TextPlacedObject, ArrowPlacedObject, SpritePlacedObject, DrawingArrow } from '@/types';
 import { assetManager } from '@/lib/utils/assetManager';
 
 export class CanvasRenderer {
@@ -22,6 +22,7 @@ export class CanvasRenderer {
   };
   private dpr = 1;
   private animationFrames = new Map<string, number>();
+  private drawingArrow: DrawingArrow | null = null;
 
   constructor(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
     this.canvas = canvas;
@@ -74,6 +75,10 @@ export class CanvasRenderer {
 
   setTileBrush(brush: TileBrush) {
     this.tileBrush = brush;
+  }
+
+  setDrawingArrow(arrow: DrawingArrow | null) {
+    this.drawingArrow = arrow;
   }
 
   render() {
@@ -147,6 +152,11 @@ export class CanvasRenderer {
     // Draw selection (only in editor mode)
     if (this.selection && !this.gameResolution.enabled) {
       this.drawSelection();
+    }
+    
+    // Draw arrow being drawn (only in editor mode)
+    if (this.drawingArrow && !this.gameResolution.enabled && this.mode === 'arrow') {
+      this.drawTemporaryArrow();
     }
     
     // Restore clipping if game resolution was enabled
@@ -279,57 +289,187 @@ export class CanvasRenderer {
     const now = Date.now();
     
     for (const obj of layer.objects) {
-      const asset = this.assets.find(a => a.id === obj.assetId);
-      if (!asset) continue;
+      if (obj.type === 'sprite') {
+        this.drawSpriteObject(obj as SpritePlacedObject, layer, now);
+      } else if (obj.type === 'text') {
+        this.drawTextObject(obj as TextPlacedObject, layer);
+      } else if (obj.type === 'arrow') {
+        this.drawArrowObject(obj as ArrowPlacedObject, layer);
+      }
+    }
+  }
+  
+  private drawSpriteObject(obj: SpritePlacedObject, layer: ObjectLayer, now: number) {
+    const asset = this.assets.find(a => a.id === obj.assetId);
+    if (!asset) return;
+    
+    const img = assetManager.getImage(asset.id);
+    if (!img) return;
+    
+    this.ctx.save();
+    this.ctx.translate(obj.x, obj.y);
+    this.ctx.rotate(obj.rot);
+    this.ctx.scale(obj.scale, obj.scale);
+    
+    if (asset.type === 'sprite') {
+      const meta = asset.meta as any;
+      const frameIndex = this.getAnimationFrame(obj.id, meta, now - obj.t);
+      const col = frameIndex % meta.cols;
+      const row = Math.floor(frameIndex / meta.cols);
       
-      const img = assetManager.getImage(asset.id);
-      if (!img) continue;
+      this.ctx.drawImage(
+        img,
+        col * meta.frameW, row * meta.frameH, meta.frameW, meta.frameH,
+        -meta.frameW / 2, -meta.frameH / 2, meta.frameW, meta.frameH
+      );
+    } else {
+      this.ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    }
+    
+    this.ctx.restore();
+    
+    // Draw selection outline
+    if (this.selection?.layerId === layer.id && this.selection?.objectId === obj.id) {
+      this.ctx.strokeStyle = '#ffd166'; // --outline color
+      this.ctx.lineWidth = 2 / this.camera.zoom;
       
-      this.ctx.save();
-      this.ctx.translate(obj.x, obj.y);
-      this.ctx.rotate(obj.rot);
-      this.ctx.scale(obj.scale, obj.scale);
+      // Get actual sprite bounds
+      let width = this.ppu;
+      let height = this.ppu;
       
       if (asset.type === 'sprite') {
         const meta = asset.meta as any;
-        const frameIndex = this.getAnimationFrame(obj.id, meta, now - obj.t);
-        const col = frameIndex % meta.cols;
-        const row = Math.floor(frameIndex / meta.cols);
-        
-        this.ctx.drawImage(
-          img,
-          col * meta.frameW, row * meta.frameH, meta.frameW, meta.frameH,
-          -meta.frameW / 2, -meta.frameH / 2, meta.frameW, meta.frameH
-        );
-      } else {
-        this.ctx.drawImage(img, -img.width / 2, -img.height / 2);
+        width = meta.frameW * obj.scale;
+        height = meta.frameH * obj.scale;
       }
       
-      this.ctx.restore();
-      
-      // Draw selection outline
-      if (this.selection?.layerId === layer.id && this.selection?.objectId === obj.id) {
-        this.ctx.strokeStyle = '#ffd166'; // --outline color
-        this.ctx.lineWidth = 2 / this.camera.zoom;
-        
-        // Get actual sprite bounds
-        let width = this.ppu;
-        let height = this.ppu;
-        
-        if (asset.type === 'sprite') {
-          const meta = asset.meta as any;
-          width = meta.frameW * obj.scale;
-          height = meta.frameH * obj.scale;
-        }
-        
-        this.ctx.strokeRect(
-          obj.x - width / 2,
-          obj.y - height / 2,
-          width,
-          height
-        );
-      }
+      this.ctx.strokeRect(
+        obj.x - width / 2,
+        obj.y - height / 2,
+        width,
+        height
+      );
     }
+  }
+  
+  private drawTextObject(obj: TextPlacedObject, layer: ObjectLayer) {
+    this.ctx.save();
+    
+    // Set text properties
+    this.ctx.font = `${obj.fontSize}px monospace`;
+    this.ctx.fillStyle = obj.color;
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    
+    // Draw text
+    this.ctx.fillText(obj.text, obj.x, obj.y);
+    
+    // Draw selection outline
+    if (this.selection?.layerId === layer.id && this.selection?.objectId === obj.id) {
+      const metrics = this.ctx.measureText(obj.text);
+      const width = metrics.width;
+      const height = obj.fontSize;
+      
+      this.ctx.strokeStyle = '#ffd166'; // --outline color
+      this.ctx.lineWidth = 2 / this.camera.zoom;
+      this.ctx.strokeRect(
+        obj.x - width / 2,
+        obj.y - height / 2,
+        width,
+        height
+      );
+    }
+    
+    this.ctx.restore();
+  }
+  
+  private drawArrowObject(obj: ArrowPlacedObject, layer: ObjectLayer) {
+    this.ctx.save();
+    
+    // Set arrow properties
+    this.ctx.strokeStyle = obj.color;
+    this.ctx.lineWidth = obj.strokeWidth;
+    this.ctx.lineCap = 'round';
+    
+    // Draw arrow line
+    this.ctx.beginPath();
+    this.ctx.moveTo(obj.x, obj.y);
+    this.ctx.lineTo(obj.endX, obj.endY);
+    this.ctx.stroke();
+    
+    // Draw arrow head
+    const angle = Math.atan2(obj.endY - obj.y, obj.endX - obj.x);
+    const headLength = 10;
+    
+    this.ctx.beginPath();
+    this.ctx.moveTo(obj.endX, obj.endY);
+    this.ctx.lineTo(
+      obj.endX - headLength * Math.cos(angle - Math.PI / 6),
+      obj.endY - headLength * Math.sin(angle - Math.PI / 6)
+    );
+    this.ctx.moveTo(obj.endX, obj.endY);
+    this.ctx.lineTo(
+      obj.endX - headLength * Math.cos(angle + Math.PI / 6),
+      obj.endY - headLength * Math.sin(angle + Math.PI / 6)
+    );
+    this.ctx.stroke();
+    
+    // Draw selection outline
+    if (this.selection?.layerId === layer.id && this.selection?.objectId === obj.id) {
+      this.ctx.strokeStyle = '#ffd166'; // --outline color
+      this.ctx.lineWidth = 2 / this.camera.zoom;
+      
+      // Draw selection circles at start and end points
+      this.ctx.beginPath();
+      this.ctx.arc(obj.x, obj.y, 5, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.beginPath();
+      this.ctx.arc(obj.endX, obj.endY, 5, 0, Math.PI * 2);
+      this.ctx.stroke();
+    }
+    
+    this.ctx.restore();
+  }
+  
+  private drawTemporaryArrow() {
+    if (!this.drawingArrow) return;
+    
+    this.ctx.save();
+    
+    // Set temporary arrow style
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    this.ctx.lineWidth = 2;
+    this.ctx.lineCap = 'round';
+    this.ctx.setLineDash([5, 5]);
+    
+    // Draw arrow line
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.drawingArrow.startX, this.drawingArrow.startY);
+    this.ctx.lineTo(this.drawingArrow.endX, this.drawingArrow.endY);
+    this.ctx.stroke();
+    
+    // Draw arrow head
+    const angle = Math.atan2(
+      this.drawingArrow.endY - this.drawingArrow.startY,
+      this.drawingArrow.endX - this.drawingArrow.startX
+    );
+    const headLength = 10;
+    
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.drawingArrow.endX, this.drawingArrow.endY);
+    this.ctx.lineTo(
+      this.drawingArrow.endX - headLength * Math.cos(angle - Math.PI / 6),
+      this.drawingArrow.endY - headLength * Math.sin(angle - Math.PI / 6)
+    );
+    this.ctx.moveTo(this.drawingArrow.endX, this.drawingArrow.endY);
+    this.ctx.lineTo(
+      this.drawingArrow.endX - headLength * Math.cos(angle + Math.PI / 6),
+      this.drawingArrow.endY - headLength * Math.sin(angle + Math.PI / 6)
+    );
+    this.ctx.stroke();
+    
+    this.ctx.setLineDash([]);
+    this.ctx.restore();
   }
 
   private drawSelection() {

@@ -8,9 +8,11 @@ import { LayersPanel } from './panels/LayersPanel';
 import { InspectorPanel } from './panels/InspectorPanel';
 import { EditorCanvas } from './editor/EditorCanvas';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useLocalStorageRestore } from '@/hooks/useLocalStorageRestore';
 
 export const EditorLayout: FC = () => {
   useKeyboardShortcuts();
+  useLocalStorageRestore();
   
   return (
     <div className="h-[100dvh] max-h-[100dvh] grid grid-rows-[52px_1fr] overflow-hidden">

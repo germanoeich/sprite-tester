@@ -14,6 +14,9 @@ export const useEditorCanvasState = () => {
   const assets = useEditorStore(state => state.assets);
   const mode = useEditorStore(state => state.mode);
   const tileBrush = useEditorStore(state => state.tileBrush);
+  const drawingArrow = useEditorStore(state => state.drawingArrow);
+  const textSettings = useEditorStore(state => state.textSettings);
+  const arrowSettings = useEditorStore(state => state.arrowSettings);
   
   return {
     camera,
@@ -24,7 +27,10 @@ export const useEditorCanvasState = () => {
     selection,
     assets,
     mode,
-    tileBrush
+    tileBrush,
+    drawingArrow,
+    textSettings,
+    arrowSettings
   };
 };
 
@@ -52,6 +58,9 @@ export const useEditorActions = () => {
   const addObject = useEditorStore(state => state.addObject);
   const setSelection = useEditorStore(state => state.setSelection);
   const setPanning = useEditorStore(state => state.setPanning);
+  const setDrawingArrow = useEditorStore(state => state.setDrawingArrow);
+  const setTextSettings = useEditorStore(state => state.setTextSettings);
+  const setArrowSettings = useEditorStore(state => state.setArrowSettings);
   
   return {
     panCamera,
@@ -60,7 +69,10 @@ export const useEditorActions = () => {
     removeTile,
     addObject,
     setSelection,
-    setPanning
+    setPanning,
+    setDrawingArrow,
+    setTextSettings,
+    setArrowSettings
   };
 };
 

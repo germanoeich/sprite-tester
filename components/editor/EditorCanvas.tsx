@@ -21,7 +21,8 @@ export const EditorCanvas: FC = memo(() => {
     selection,
     assets,
     mode,
-    tileBrush
+    tileBrush,
+    drawingArrow
   } = useEditorCanvasState();
   
   // Initialize renderer
@@ -53,7 +54,8 @@ export const EditorCanvas: FC = memo(() => {
     rendererRef.current.setAssets(assets);
     rendererRef.current.setMode(mode);
     rendererRef.current.setTileBrush(tileBrush);
-  }, [camera, layers, gridVisible, gameResolution, ppu, selection, assets, mode, tileBrush]);
+    rendererRef.current.setDrawingArrow(drawingArrow);
+  }, [camera, layers, gridVisible, gameResolution, ppu, selection, assets, mode, tileBrush, drawingArrow]);
   
   // Handle canvas resize with memoized callback
   const handleResize = useCallback((entry: ResizeObserverEntry) => {
