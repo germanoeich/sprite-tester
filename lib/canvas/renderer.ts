@@ -292,9 +292,15 @@ export class CanvasRenderer {
       if (obj.type === 'sprite') {
         this.drawSpriteObject(obj as SpritePlacedObject, layer, now);
       } else if (obj.type === 'text') {
-        this.drawTextObject(obj as TextPlacedObject, layer);
+        // Hide text in game resolution mode
+        if (!this.gameResolution.enabled) {
+          this.drawTextObject(obj as TextPlacedObject, layer);
+        }
       } else if (obj.type === 'arrow') {
-        this.drawArrowObject(obj as ArrowPlacedObject, layer);
+        // Hide arrows in game resolution mode
+        if (!this.gameResolution.enabled) {
+          this.drawArrowObject(obj as ArrowPlacedObject, layer);
+        }
       }
     }
   }
