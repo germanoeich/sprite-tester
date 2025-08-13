@@ -18,7 +18,7 @@ export const EditorLayout: FC = () => {
       
       <div className="grid grid-cols-[300px_1fr_320px] h-full overflow-hidden">
         {/* Left Sidebar */}
-        <aside className="bg-[--panel] border-r border-[#1f2535] overflow-hidden grid grid-rows-[1fr_1fr]">
+        <aside className="bg-[--panel] border-r border-[#1f2535] overflow-hidden grid grid-rows-[500px_1fr]">
           <AssetsPanel />
           <PalettePanel />
         </aside>

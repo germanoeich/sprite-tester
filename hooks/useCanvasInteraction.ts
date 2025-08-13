@@ -176,7 +176,8 @@ export function useCanvasInteraction(
                 return;
               }
               
-              const pos = stateRef.current.snapToGridEnabled 
+              const shouldSnap = e.altKey ? !stateRef.current.snapToGridEnabled : stateRef.current.snapToGridEnabled;
+              const pos = shouldSnap 
                 ? { x: snapToGrid(worldPos.x, stateRef.current.ppu), y: snapToGrid(worldPos.y, stateRef.current.ppu) }
                 : worldPos;
               
@@ -233,11 +234,12 @@ export function useCanvasInteraction(
         const newX = worldPos.x - draggedObject.offsetX;
         const newY = worldPos.y - draggedObject.offsetY;
         
-        // Apply snap to grid if enabled
-        const finalX = stateRef.current.snapToGridEnabled 
+        // Apply snap to grid if enabled (Alt key overrides snap setting)
+        const shouldSnap = e.altKey ? !stateRef.current.snapToGridEnabled : stateRef.current.snapToGridEnabled;
+        const finalX = shouldSnap 
           ? snapToGrid(newX, stateRef.current.ppu) 
           : newX;
-        const finalY = stateRef.current.snapToGridEnabled 
+        const finalY = shouldSnap 
           ? snapToGrid(newY, stateRef.current.ppu) 
           : newY;
         

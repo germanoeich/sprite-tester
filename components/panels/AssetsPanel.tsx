@@ -8,6 +8,7 @@ import { openFileDialog, fileToDataURL, loadImage } from '@/lib/utils/file';
 import { generateId } from '@/lib/utils/id';
 import { assetManager } from '@/lib/utils/assetManager';
 import { Asset, AssetTab } from '@/types';
+import { AnimatedSpritePreview } from '@/components/ui/AnimatedSpritePreview';
 
 export const AssetsPanel: FC = () => {
   const assets = useEditorStore(state => state.assets);
@@ -96,14 +97,14 @@ export const AssetsPanel: FC = () => {
                   }
                 }}
                 className={cn(
-                  'asset-card bg-[--panel-2] border border-[#2a334d] rounded-xl p-2',
+                  'asset-card bg-[--panel-2] border-2 border-[#2a334d] rounded-xl p-2',
                   'grid grid-cols-[44px_1fr_auto] gap-2 items-center cursor-pointer',
-                  'hover:border-[#3a4768]',
-                  selectedAssetId === asset.id && 'border-[--accent]'
+                  'hover:border-[#3a4768] transition-all',
+                  selectedAssetId === asset.id && 'border-[--accent] bg-[--accent]/10 shadow-md'
                 )}
               >
                 <div className="thumb w-11 h-11 bg-[#0c0f16] rounded-lg grid place-items-center border border-dashed border-[#2b3247] overflow-hidden">
-                  <img src={asset.dataURL} alt={asset.name} className="max-w-full max-h-full" />
+                  <AnimatedSpritePreview asset={asset} className="w-11 h-11" />
                 </div>
                 
                 <div className="meta flex gap-2.5 items-baseline min-w-0">

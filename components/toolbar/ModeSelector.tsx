@@ -22,9 +22,9 @@ export const ModeSelector: FC = () => {
           key={value}
           onClick={() => setMode(value)}
           className={cn(
-            'px-3 py-1 text-xs font-semibold rounded-md transition-all',
+            'px-3 py-1.5 text-xs font-semibold rounded-md transition-all relative',
             mode === value
-              ? 'bg-[--accent] text-white'
+              ? 'bg-[--accent] text-white shadow-lg shadow-[--accent]/30 scale-105 border border-white/20'
               : 'text-[--muted] hover:text-[--text] hover:bg-[rgba(255,255,255,0.05)]'
           )}
           title={`${label} (${key})`}

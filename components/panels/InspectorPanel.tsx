@@ -165,13 +165,44 @@ export const InspectorPanel: FC = () => {
       return <div className="text-[--muted] text-sm">Object not found</div>;
     }
 
+    const updateObjectProperty = (property: string, value: number) => {
+      const layer = layers.find(l => l.id === selection.layerId);
+      if (layer && layer.type === 'object') {
+        const updateObject = useEditorStore.getState().updateObject;
+        updateObject(selection.layerId, selection.objectId, { [property]: value });
+      }
+    };
+
     return (
       <div className="grid gap-3">
         <h3 className="font-semibold">Object Properties</h3>
-        <Field label="X" type="number" value={object.x} disabled />
-        <Field label="Y" type="number" value={object.y} disabled />
-        <Field label="Scale" type="number" value={object.scale} disabled />
-        <Field label="Rotation" type="number" value={object.rot} disabled />
+        <Field 
+          label="X" 
+          type="number" 
+          value={object.x} 
+          onChange={(e) => updateObjectProperty('x', parseFloat(e.target.value) || 0)}
+        />
+        <Field 
+          label="Y" 
+          type="number" 
+          value={object.y} 
+          onChange={(e) => updateObjectProperty('y', parseFloat(e.target.value) || 0)}
+        />
+        <Field 
+          label="Scale" 
+          type="number" 
+          value={object.scale} 
+          step="0.1"
+          min="0.1"
+          max="10"
+          onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value) || 1)}
+        />
+        <Field 
+          label="Rotation (deg)" 
+          type="number" 
+          value={Math.round(object.rot * 180 / Math.PI)} 
+          onChange={(e) => updateObjectProperty('rot', (parseFloat(e.target.value) || 0) * Math.PI / 180)}
+        />
         <button
           onClick={() => {
             removeObject(selection.layerId, selection.objectId);
