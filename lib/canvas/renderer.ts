@@ -90,18 +90,47 @@ export class CanvasRenderer {
     // Center origin
     this.ctx.translate(cssWidth / 2, cssHeight / 2);
     
-    // Apply camera transform
-    this.ctx.scale(this.camera.zoom, this.camera.zoom);
-    this.ctx.translate(-this.camera.x, -this.camera.y);
-    
-    // Draw grid
-    if (this.gridVisible) {
-      this.drawGrid();
+    // Apply camera transform or game viewport
+    if (this.gameResolution.enabled) {
+      // Calculate scale to fit game resolution in canvas
+      const scaleX = cssWidth / this.gameResolution.width;
+      const scaleY = cssHeight / this.gameResolution.height;
+      const scale = Math.min(scaleX, scaleY);
+      
+      // Apply game viewport scaling
+      this.ctx.scale(scale, scale);
+      
+      // Draw game viewport background
+      this.ctx.fillStyle = '#000000';
+      this.ctx.fillRect(
+        -this.gameResolution.width / 2,
+        -this.gameResolution.height / 2,
+        this.gameResolution.width,
+        this.gameResolution.height
+      );
+      
+      // Set up clipping region to game viewport
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.rect(
+        -this.gameResolution.width / 2,
+        -this.gameResolution.height / 2,
+        this.gameResolution.width,
+        this.gameResolution.height
+      );
+      this.ctx.clip();
+      
+      // Apply camera panning within the game view
+      this.ctx.translate(-this.camera.x, -this.camera.y);
+    } else {
+      // Normal editor camera
+      this.ctx.scale(this.camera.zoom, this.camera.zoom);
+      this.ctx.translate(-this.camera.x, -this.camera.y);
     }
     
-    // Draw game resolution boundary
-    if (this.gameResolution.enabled) {
-      this.drawGameBoundary();
+    // Draw grid (only in editor mode)
+    if (this.gridVisible && !this.gameResolution.enabled) {
+      this.drawGrid();
     }
     
     // Draw layers
@@ -115,9 +144,43 @@ export class CanvasRenderer {
       }
     }
     
-    // Draw selection
-    if (this.selection) {
+    // Draw selection (only in editor mode)
+    if (this.selection && !this.gameResolution.enabled) {
       this.drawSelection();
+    }
+    
+    // Restore clipping if game resolution was enabled
+    if (this.gameResolution.enabled) {
+      this.ctx.restore();
+      
+      // Draw letterbox/pillarbox areas
+      this.ctx.fillStyle = '#1a1d28';
+      const halfWidth = this.gameResolution.width / 2;
+      const halfHeight = this.gameResolution.height / 2;
+      const canvasHalfWidth = cssWidth / 2;
+      const canvasHalfHeight = cssHeight / 2;
+      
+      // Calculate scale to fit game resolution in canvas
+      const scaleX = cssWidth / this.gameResolution.width;
+      const scaleY = cssHeight / this.gameResolution.height;
+      const scale = Math.min(scaleX, scaleY);
+      
+      const scaledHalfWidth = halfWidth * scale;
+      const scaledHalfHeight = halfHeight * scale;
+      
+      // Top letterbox
+      if (scaledHalfHeight < canvasHalfHeight) {
+        this.ctx.fillRect(-canvasHalfWidth, -canvasHalfHeight, cssWidth, canvasHalfHeight - scaledHalfHeight);
+        // Bottom letterbox
+        this.ctx.fillRect(-canvasHalfWidth, scaledHalfHeight, cssWidth, canvasHalfHeight - scaledHalfHeight);
+      }
+      
+      // Left pillarbox
+      if (scaledHalfWidth < canvasHalfWidth) {
+        this.ctx.fillRect(-canvasHalfWidth, -canvasHalfHeight, canvasHalfWidth - scaledHalfWidth, cssHeight);
+        // Right pillarbox
+        this.ctx.fillRect(scaledHalfWidth, -canvasHalfHeight, canvasHalfWidth - scaledHalfWidth, cssHeight);
+      }
     }
     
     // Restore state
@@ -128,7 +191,7 @@ export class CanvasRenderer {
     const gridSize = this.ppu;
     const viewBounds = this.getViewBounds();
     
-    this.ctx.strokeStyle = 'var(--grid)';
+    this.ctx.strokeStyle = 'rgba(255,255,255,0.08)'; // --grid color
     this.ctx.lineWidth = 1 / this.camera.zoom;
     this.ctx.beginPath();
     
@@ -164,7 +227,7 @@ export class CanvasRenderer {
   private drawGameBoundary() {
     const { width, height } = this.gameResolution;
     
-    this.ctx.strokeStyle = 'var(--outline)';
+    this.ctx.strokeStyle = '#ffd166'; // --outline color
     this.ctx.lineWidth = 2 / this.camera.zoom;
     this.ctx.setLineDash([10, 5]);
     this.ctx.strokeRect(-width / 2, -height / 2, width, height);
@@ -172,30 +235,43 @@ export class CanvasRenderer {
   }
 
   private drawTileLayer(layer: TileLayer) {
-    if (!layer.tilesetId || layer.grid.size === 0) return;
-    
-    const tileset = this.assets.find(a => a.id === layer.tilesetId);
-    if (!tileset) return;
-    
-    const img = assetManager.getImage(tileset.id);
-    if (!img) return;
-    
-    const meta = tileset.meta as TilesetMetadata;
-    const { tileW, tileH, margin, spacing } = meta;
-    const cols = Math.floor((img.width - 2 * margin + spacing) / (tileW + spacing));
+    if (layer.grid.size === 0) return;
     
     this.ctx.imageSmoothingEnabled = false;
     
+    // Group tiles by tileset for efficient rendering
+    const tilesByTileset = new Map<string, Array<{x: number, y: number, index: number}>>();
+    
     layer.grid.forEach((cell, key) => {
       const [x, y] = key.split(',').map(Number);
-      const sourceX = margin + (cell.index % cols) * (tileW + spacing);
-      const sourceY = margin + Math.floor(cell.index / cols) * (tileH + spacing);
+      if (!tilesByTileset.has(cell.tilesetId)) {
+        tilesByTileset.set(cell.tilesetId, []);
+      }
+      tilesByTileset.get(cell.tilesetId)!.push({ x, y, index: cell.index });
+    });
+    
+    // Render tiles grouped by tileset
+    tilesByTileset.forEach((tiles, tilesetId) => {
+      const tileset = this.assets.find(a => a.id === tilesetId);
+      if (!tileset) return;
       
-      this.ctx.drawImage(
-        img,
-        sourceX, sourceY, tileW, tileH,
-        x * this.ppu, y * this.ppu, this.ppu, this.ppu
-      );
+      const img = assetManager.getImage(tileset.id);
+      if (!img) return;
+      
+      const meta = tileset.meta as TilesetMetadata;
+      const { tileW, tileH, margin, spacing } = meta;
+      const cols = Math.floor((img.width - 2 * margin + spacing) / (tileW + spacing));
+      
+      tiles.forEach(({ x, y, index }) => {
+        const sourceX = margin + (index % cols) * (tileW + spacing);
+        const sourceY = margin + Math.floor(index / cols) * (tileH + spacing);
+        
+        this.ctx.drawImage(
+          img,
+          sourceX, sourceY, tileW, tileH,
+          x * this.ppu, y * this.ppu, this.ppu, this.ppu
+        );
+      });
     });
   }
 
@@ -233,13 +309,24 @@ export class CanvasRenderer {
       
       // Draw selection outline
       if (this.selection?.layerId === layer.id && this.selection?.objectId === obj.id) {
-        this.ctx.strokeStyle = 'var(--outline)';
+        this.ctx.strokeStyle = '#ffd166'; // --outline color
         this.ctx.lineWidth = 2 / this.camera.zoom;
+        
+        // Get actual sprite bounds
+        let width = this.ppu;
+        let height = this.ppu;
+        
+        if (asset.type === 'sprite') {
+          const meta = asset.meta as any;
+          width = meta.frameW * obj.scale;
+          height = meta.frameH * obj.scale;
+        }
+        
         this.ctx.strokeRect(
-          obj.x - this.ppu / 2,
-          obj.y - this.ppu / 2,
-          this.ppu,
-          this.ppu
+          obj.x - width / 2,
+          obj.y - height / 2,
+          width,
+          height
         );
       }
     }

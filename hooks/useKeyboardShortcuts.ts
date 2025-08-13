@@ -18,12 +18,9 @@ export function useKeyboardShortcuts() {
           setMode('select');
           break;
         case '2':
-          setMode('tile');
+          setMode('place');
           break;
         case '3':
-          setMode('placeSprite');
-          break;
-        case '4':
           setMode('erase');
           break;
         case 'g':

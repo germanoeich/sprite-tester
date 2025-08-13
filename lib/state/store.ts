@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { enableMapSet } from 'immer';
+import { assetManager } from '@/lib/utils/assetManager';
 import type { 
   EditorState, 
   Asset, 
@@ -91,8 +92,8 @@ const initialState: EditorState = {
   mode: 'select',
   gameResolution: {
     enabled: false,
-    width: 320,
-    height: 240
+    width: 480,
+    height: 270
   },
   
   // Assets
@@ -193,9 +194,38 @@ export const useEditorStore = create<EditorStore>()(
       }),
       
       removeAsset: (id) => set((state) => {
+        // Remove from assets array
         state.assets = state.assets.filter(a => a.id !== id);
+        
+        // Clear selections
         if (state.selectedAssetId === id) state.selectedAssetId = null;
         if (state.activeTilesetId === id) state.activeTilesetId = null;
+        
+        // Remove from assetManager
+        assetManager.removeImage(id);
+        
+        // Remove all objects that use this asset
+        state.layers.forEach(layer => {
+          if (layer.type === 'object') {
+            const objLayer = layer as ObjectLayer;
+            objLayer.objects = objLayer.objects.filter(obj => obj.assetId !== id);
+          }
+        });
+        
+        // Clear tiles that use this tileset
+        state.layers.forEach(layer => {
+          if (layer.type === 'tile') {
+            const tileLayer = layer as TileLayer;
+            // Remove tiles that reference this tileset
+            const keysToDelete: string[] = [];
+            tileLayer.grid.forEach((cell, key) => {
+              if (cell.tilesetId === id) {
+                keysToDelete.push(key);
+              }
+            });
+            keysToDelete.forEach(key => tileLayer.grid.delete(key));
+          }
+        });
       }),
       
       updateAsset: (id, updates) => set((state) => {
@@ -213,11 +243,7 @@ export const useEditorStore = create<EditorStore>()(
         state.activeTilesetId = id;
         if (id) {
           state.tileBrush.tilesetId = id;
-          // Also set the tileset on the first tile layer
-          const tileLayer = state.layers.find(l => l.type === 'tile') as TileLayer;
-          if (tileLayer) {
-            tileLayer.tilesetId = id;
-          }
+          // Don't update the tile layer's tilesetId - each tile has its own tilesetId
         }
       }),
       
@@ -227,6 +253,11 @@ export const useEditorStore = create<EditorStore>()(
       
       // Layer actions
       addLayer: (layer) => set((state) => {
+        // Check if layer with this ID already exists
+        if (state.layers.some(l => l.id === layer.id)) {
+          console.warn(`Layer with ID ${layer.id} already exists, skipping`);
+          return;
+        }
         state.layers.push(layer);
       }),
       

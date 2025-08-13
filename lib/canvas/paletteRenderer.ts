@@ -98,7 +98,7 @@ export class PaletteRenderer {
       const w = this.tileBrush.width * tileW + (this.tileBrush.width - 1) * spacing;
       const h = this.tileBrush.height * tileH + (this.tileBrush.height - 1) * spacing;
       
-      this.ctx.strokeStyle = 'var(--outline)';
+      this.ctx.strokeStyle = '#ffd166'; // --outline color
       this.ctx.lineWidth = 2 / this.camera.zoom;
       this.ctx.strokeRect(x, y, w, h);
     }
@@ -116,7 +116,7 @@ export class PaletteRenderer {
       const w = (maxC - minC + 1) * tileW + (maxC - minC) * spacing;
       const h = (maxR - minR + 1) * tileH + (maxR - minR) * spacing;
       
-      this.ctx.strokeStyle = 'var(--accent)';
+      this.ctx.strokeStyle = '#7aa2ff'; // --accent color
       this.ctx.setLineDash([6, 4]);
       this.ctx.lineWidth = 2 / this.camera.zoom;
       this.ctx.strokeRect(x, y, w, h);

@@ -1,4 +1,4 @@
-export type EditorMode = 'select' | 'tile' | 'erase' | 'placeSprite';
+export type EditorMode = 'select' | 'place' | 'erase';
 export type AssetType = 'sprite' | 'tileset';
 export type AssetTab = 'sprite' | 'tileset';
 export type LayerType = 'tile' | 'object';

@@ -24,7 +24,7 @@ export const GameResControl: FC = () => {
       <input
         type="number"
         value={gameResolution.width}
-        onChange={(e) => setGameResolution(parseInt(e.target.value) || 320, gameResolution.height)}
+        onChange={(e) => setGameResolution(parseInt(e.target.value) || 480, gameResolution.height)}
         disabled={!gameResolution.enabled}
         className="w-[48px] bg-[--panel-2] border border-[#2a334d] text-[--text] px-1 py-1 rounded text-xs disabled:opacity-50"
       />
@@ -32,7 +32,7 @@ export const GameResControl: FC = () => {
       <input
         type="number"
         value={gameResolution.height}
-        onChange={(e) => setGameResolution(gameResolution.width, parseInt(e.target.value) || 240)}
+        onChange={(e) => setGameResolution(gameResolution.width, parseInt(e.target.value) || 270)}
         disabled={!gameResolution.enabled}
         className="w-[48px] bg-[--panel-2] border border-[#2a334d] text-[--text] px-1 py-1 rounded text-xs disabled:opacity-50"
       />

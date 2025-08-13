@@ -9,7 +9,9 @@ import { PPUControl } from './PPUControl';
 import { GameResControl } from './GameResControl';
 import { exportScene, importScene } from '@/lib/utils/export';
 import { openFileDialog } from '@/lib/utils/file';
+import { generateId } from '@/lib/utils/id';
 import { showToast } from '@/components/ui/Toast';
+import { assetManager } from '@/lib/utils/assetManager';
 
 export const Toolbar: FC = () => {
   const gridVisible = useEditorStore(state => state.gridVisible);
@@ -32,27 +34,61 @@ export const Toolbar: FC = () => {
     
     try {
       const sceneData = await importScene(files[0]);
+      const store = useEditorStore.getState();
+      
+      // Clear existing assets first
+      const currentAssets = [...useEditorStore.getState().assets];
+      currentAssets.forEach(asset => {
+        assetManager.removeImage(asset.id);
+        store.removeAsset(asset.id);
+      });
+      
+      // Clear existing layers
+      const currentLayers = [...useEditorStore.getState().layers];
+      currentLayers.forEach(layer => {
+        store.removeLayer(layer.id);
+      });
       
       // Update state with imported data
-      if (sceneData.ppu) useEditorStore.getState().setPPU(sceneData.ppu);
+      if (sceneData.ppu) store.setPPU(sceneData.ppu);
       if (sceneData.gameResolution) {
-        useEditorStore.getState().setGameResolution(
+        store.setGameResolution(
           sceneData.gameResolution.width,
           sceneData.gameResolution.height
         );
       }
+      
+      // Add imported assets
+      if (sceneData.assets) {
+        sceneData.assets.forEach(asset => {
+          // Store the image in assetManager (this is critical for rendering!)
+          if (asset.img) {
+            assetManager.setImage(asset.id, asset.img);
+          }
+          // addAsset will set img to null but keeps the dataURL
+          store.addAsset(asset);
+          // After adding, update with the actual img
+          store.updateAsset(asset.id, { img: asset.img });
+        });
+      }
+      
+      // Add imported layers (they already have proper structure from importScene)
       if (sceneData.layers) {
-        // Clear existing layers and add imported ones
-        // This is simplified - in production you'd want to merge or replace more carefully
         sceneData.layers.forEach(layer => {
-          useEditorStore.getState().addLayer(layer);
+          store.addLayer(layer);
         });
       }
       
       showToast('Scene imported successfully', 'success');
     } catch (error) {
-      showToast('Failed to import scene', 'error');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showToast(`Failed to import scene: ${errorMessage}`, 'error');
       console.error('Import error:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: errorMessage,
+        stack: error instanceof Error ? error.stack : 'No stack trace'
+      });
     }
   };
 

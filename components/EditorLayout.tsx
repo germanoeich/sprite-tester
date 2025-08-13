@@ -13,12 +13,12 @@ export const EditorLayout: FC = () => {
   useKeyboardShortcuts();
   
   return (
-    <div className="h-screen grid grid-rows-[52px_1fr]">
+    <div className="h-[100dvh] max-h-[100dvh] grid grid-rows-[52px_1fr] overflow-hidden">
       <Toolbar />
       
-      <div className="grid grid-cols-[300px_1fr_320px] h-full">
+      <div className="grid grid-cols-[300px_1fr_320px] h-full overflow-hidden">
         {/* Left Sidebar */}
-        <aside className="bg-[--panel] border-r border-[#1f2535] overflow-hidden grid grid-rows-[auto_200px_1fr]">
+        <aside className="bg-[--panel] border-r border-[#1f2535] overflow-hidden grid grid-rows-[1fr_1fr]">
           <AssetsPanel />
           <PalettePanel />
         </aside>

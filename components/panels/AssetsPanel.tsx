@@ -17,6 +17,7 @@ export const AssetsPanel: FC = () => {
   const setSelectedAssetId = useEditorStore(state => state.setSelectedAssetId);
   const setActiveTilesetId = useEditorStore(state => state.setActiveTilesetId);
   const addAsset = useEditorStore(state => state.addAsset);
+  const removeAsset = useEditorStore(state => state.removeAsset);
 
   const handleImport = async () => {
     const files = await openFileDialog('image/*', true);
@@ -39,7 +40,14 @@ export const AssetsPanel: FC = () => {
         img: null, // Don't store HTMLImageElement in Zustand
         meta: activeAssetTab === 'tileset' 
           ? { tileW: 16, tileH: 16, margin: 0, spacing: 0 }
-          : { frameW: 16, frameH: 16, cols: 1, rows: 1, frameDur: 100, loop: true }
+          : { 
+              cols: 1, 
+              rows: 1, 
+              frameW: Math.floor(img.width / 1), // Auto-calculate from image width and cols
+              frameH: Math.floor(img.height / 1), // Auto-calculate from image height and rows
+              frameDur: 100, 
+              loop: true 
+            }
       };
       
       addAsset(asset);
@@ -53,8 +61,8 @@ export const AssetsPanel: FC = () => {
   const filteredAssets = assets.filter(a => a.type === activeAssetTab);
 
   return (
-    <div className="assets-section border-b border-[#1f2535]">
-      <div className="asset-tabs flex bg-[#121521] border-b border-[#1f2535]">
+    <div className="assets-section border-b border-[#1f2535] h-full flex flex-col">
+      <div className="asset-tabs flex bg-[#121521] border-b border-[#1f2535] flex-shrink-0">
         {(['sprite', 'tileset'] as AssetTab[]).map(tab => (
           <button
             key={tab}
@@ -71,7 +79,7 @@ export const AssetsPanel: FC = () => {
         ))}
       </div>
       
-      <div className="assets-container overflow-y-auto overflow-x-hidden p-3">
+      <div className="assets-container overflow-y-auto overflow-x-hidden p-3 flex-1">
         <div className="asset-list grid gap-2">
           {filteredAssets.length === 0 ? (
             <div className="empty-state text-center text-[--muted] py-4">
@@ -104,18 +112,32 @@ export const AssetsPanel: FC = () => {
                   </div>
                 </div>
                 
-                <Button 
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedAssetId(asset.id);
-                    if (asset.type === 'tileset') {
-                      setActiveTilesetId(asset.id);
-                    }
-                  }}
-                >
-                  {asset.type === 'tileset' ? 'Use' : 'Inspect'}
-                </Button>
+                <div className="flex gap-1">
+                  <Button 
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedAssetId(asset.id);
+                      if (asset.type === 'tileset') {
+                        setActiveTilesetId(asset.id);
+                      }
+                    }}
+                  >
+                    {asset.type === 'tileset' ? 'Use' : 'Inspect'}
+                  </Button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete ${asset.name}? This will also remove all objects/tiles using this asset.`)) {
+                        removeAsset(asset.id);
+                      }
+                    }}
+                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                    title="Delete asset"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             ))
           )}
