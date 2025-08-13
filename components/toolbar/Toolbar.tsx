@@ -33,14 +33,14 @@ export const Toolbar: FC = () => {
     
     // Clear existing assets first
     const currentAssets = [...useEditorStore.getState().assets];
-    currentAssets.forEach(asset => {
+    currentAssets.forEach((asset: any) => {
       assetManager.removeImage(asset.id);
       store.removeAsset(asset.id);
     });
     
     // Clear existing layers
     const currentLayers = [...useEditorStore.getState().layers];
-    currentLayers.forEach(layer => {
+    currentLayers.forEach((layer: any) => {
       store.removeLayer(layer.id);
     });
     
@@ -56,7 +56,7 @@ export const Toolbar: FC = () => {
     // Add imported assets and track first tileset
     let firstTilesetId: string | null = null;
     if (sceneData.assets) {
-      sceneData.assets.forEach(asset => {
+      sceneData.assets.forEach((asset: any) => {
         // Store the image in assetManager (this is critical for rendering!)
         if (asset.img) {
           assetManager.setImage(asset.id, asset.img);
@@ -75,7 +75,7 @@ export const Toolbar: FC = () => {
     
     // Add imported layers (they already have proper structure from importScene)
     if (sceneData.layers) {
-      sceneData.layers.forEach(layer => {
+      sceneData.layers.forEach((layer: any) => {
         store.addLayer(layer);
       });
     }
