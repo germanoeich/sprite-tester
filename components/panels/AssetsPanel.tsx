@@ -19,6 +19,7 @@ export const AssetsPanel: FC = () => {
   const setActiveTilesetId = useEditorStore(state => state.setActiveTilesetId);
   const addAsset = useEditorStore(state => state.addAsset);
   const removeAsset = useEditorStore(state => state.removeAsset);
+  const clearTileBrush = useEditorStore(state => state.clearTileBrush);
 
   const handleImport = async () => {
     const files = await openFileDialog('image/*', true);
@@ -94,6 +95,9 @@ export const AssetsPanel: FC = () => {
                   setSelectedAssetId(asset.id);
                   if (asset.type === 'tileset') {
                     setActiveTilesetId(asset.id);
+                  } else if (asset.type === 'sprite') {
+                    // Clear tile brush when selecting a sprite
+                    clearTileBrush();
                   }
                 }}
                 className={cn(
@@ -121,6 +125,9 @@ export const AssetsPanel: FC = () => {
                       setSelectedAssetId(asset.id);
                       if (asset.type === 'tileset') {
                         setActiveTilesetId(asset.id);
+                      } else if (asset.type === 'sprite') {
+                        // Clear tile brush when selecting a sprite
+                        clearTileBrush();
                       }
                     }}
                   >

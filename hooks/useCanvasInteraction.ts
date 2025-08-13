@@ -205,29 +205,8 @@ export function useCanvasInteraction(
           const tileBrush = stateRef.current.tileBrush;
           const selectedAssetId = stateRef.current.selectedAssetId;
           
-          // Check if we have a tile brush active
-          if (tileBrush.tilesetId && tileBrush.indices.length > 0) {
-            // Place tiles
-            const tileLayer = stateRef.current.layers.find(l => l.type === 'tile' && l.visible && !l.locked);
-            if (!tileLayer) {
-              console.log('No tile layer found');
-              return;
-            }
-            
-            const gridX = Math.floor(worldPos.x / stateRef.current.ppu);
-            const gridY = Math.floor(worldPos.y / stateRef.current.ppu);
-            
-            // Place tiles from brush
-            for (let dy = 0; dy < tileBrush.height; dy++) {
-              for (let dx = 0; dx < tileBrush.width; dx++) {
-                const index = tileBrush.indices[dy * tileBrush.width + dx];
-                if (index !== undefined) {
-                  actionsRef.current.setTile(tileLayer.id, gridX + dx, gridY + dy, tileBrush.tilesetId, index);
-                }
-              }
-            }
-          } else if (selectedAssetId) {
-            // Check if selected asset is a sprite
+          // First check if we have a sprite selected
+          if (selectedAssetId) {
             const selectedAsset = stateRef.current.assets.find(
               a => a.id === selectedAssetId
             );
@@ -256,6 +235,30 @@ export function useCanvasInteraction(
                 frame: 0,
                 t: Date.now()
               });
+              return; // Exit after placing sprite
+            }
+          }
+          
+          // If no sprite to place, check for tile brush
+          if (tileBrush.tilesetId && tileBrush.indices.length > 0) {
+            // Place tiles
+            const tileLayer = stateRef.current.layers.find(l => l.type === 'tile' && l.visible && !l.locked);
+            if (!tileLayer) {
+              console.log('No tile layer found');
+              return;
+            }
+            
+            const gridX = Math.floor(worldPos.x / stateRef.current.ppu);
+            const gridY = Math.floor(worldPos.y / stateRef.current.ppu);
+            
+            // Place tiles from brush
+            for (let dy = 0; dy < tileBrush.height; dy++) {
+              for (let dx = 0; dx < tileBrush.width; dx++) {
+                const index = tileBrush.indices[dy * tileBrush.width + dx];
+                if (index !== undefined) {
+                  actionsRef.current.setTile(tileLayer.id, gridX + dx, gridY + dy, tileBrush.tilesetId, index);
+                }
+              }
             }
           }
           break;
