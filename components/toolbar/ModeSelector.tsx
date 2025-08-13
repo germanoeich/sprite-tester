@@ -6,9 +6,9 @@ import { EditorMode } from '@/types';
 import { cn } from '@/lib/utils/cn';
 
 const modes: { value: EditorMode; label: string; key: string }[] = [
-  { value: 'select', label: 'Select', key: '1' },
-  { value: 'place', label: 'Place', key: '2' },
-  { value: 'erase', label: 'Erase', key: '3' },
+  { value: 'select', label: 'Select (1)', key: '1' },
+  { value: 'place', label: 'Place (2)', key: '2' },
+  { value: 'erase', label: 'Erase (3)', key: '3' },
 ];
 
 export const ModeSelector: FC = () => {

@@ -28,67 +28,96 @@ export const Toolbar: FC = () => {
     showToast('Scene exported successfully', 'success');
   };
   
+  const loadSceneData = async (sceneData: any) => {
+    const store = useEditorStore.getState();
+    
+    // Clear existing assets first
+    const currentAssets = [...useEditorStore.getState().assets];
+    currentAssets.forEach(asset => {
+      assetManager.removeImage(asset.id);
+      store.removeAsset(asset.id);
+    });
+    
+    // Clear existing layers
+    const currentLayers = [...useEditorStore.getState().layers];
+    currentLayers.forEach(layer => {
+      store.removeLayer(layer.id);
+    });
+    
+    // Update state with imported data
+    if (sceneData.ppu) store.setPPU(sceneData.ppu);
+    if (sceneData.gameResolution) {
+      store.setGameResolution(
+        sceneData.gameResolution.width,
+        sceneData.gameResolution.height
+      );
+    }
+    
+    // Add imported assets and track first tileset
+    let firstTilesetId: string | null = null;
+    if (sceneData.assets) {
+      sceneData.assets.forEach(asset => {
+        // Store the image in assetManager (this is critical for rendering!)
+        if (asset.img) {
+          assetManager.setImage(asset.id, asset.img);
+        }
+        // addAsset will set img to null but keeps the dataURL
+        store.addAsset(asset);
+        // After adding, update with the actual img
+        store.updateAsset(asset.id, { img: asset.img });
+        
+        // Track the first tileset
+        if (!firstTilesetId && asset.type === 'tileset') {
+          firstTilesetId = asset.id;
+        }
+      });
+    }
+    
+    // Add imported layers (they already have proper structure from importScene)
+    if (sceneData.layers) {
+      sceneData.layers.forEach(layer => {
+        store.addLayer(layer);
+      });
+    }
+    
+    // Select the first tileset if available so the palette is not empty
+    if (firstTilesetId) {
+      store.setActiveTilesetId(firstTilesetId);
+      store.setSelectedAssetId(firstTilesetId);
+    }
+  };
+
   const handleImport = async () => {
     const files = await openFileDialog('application/json', false);
     if (!files || files.length === 0) return;
     
     try {
       const sceneData = await importScene(files[0]);
-      const store = useEditorStore.getState();
-      
-      // Clear existing assets first
-      const currentAssets = [...useEditorStore.getState().assets];
-      currentAssets.forEach(asset => {
-        assetManager.removeImage(asset.id);
-        store.removeAsset(asset.id);
-      });
-      
-      // Clear existing layers
-      const currentLayers = [...useEditorStore.getState().layers];
-      currentLayers.forEach(layer => {
-        store.removeLayer(layer.id);
-      });
-      
-      // Update state with imported data
-      if (sceneData.ppu) store.setPPU(sceneData.ppu);
-      if (sceneData.gameResolution) {
-        store.setGameResolution(
-          sceneData.gameResolution.width,
-          sceneData.gameResolution.height
-        );
-      }
-      
-      // Add imported assets
-      if (sceneData.assets) {
-        sceneData.assets.forEach(asset => {
-          // Store the image in assetManager (this is critical for rendering!)
-          if (asset.img) {
-            assetManager.setImage(asset.id, asset.img);
-          }
-          // addAsset will set img to null but keeps the dataURL
-          store.addAsset(asset);
-          // After adding, update with the actual img
-          store.updateAsset(asset.id, { img: asset.img });
-        });
-      }
-      
-      // Add imported layers (they already have proper structure from importScene)
-      if (sceneData.layers) {
-        sceneData.layers.forEach(layer => {
-          store.addLayer(layer);
-        });
-      }
-      
+      await loadSceneData(sceneData);
       showToast('Scene imported successfully', 'success');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(`Failed to import scene: ${errorMessage}`, 'error');
       console.error('Import error:', error);
-      console.error('Error details:', {
-        name: error instanceof Error ? error.name : 'Unknown',
-        message: errorMessage,
-        stack: error instanceof Error ? error.stack : 'No stack trace'
-      });
+    }
+  };
+
+  const handleLoadExample = async () => {
+    try {
+      // Fetch the example scene from the public folder
+      const response = await fetch('/examples/example-scene.json');
+      if (!response.ok) {
+        throw new Error('Failed to load example scene');
+      }
+      const text = await response.text();
+      const file = new File([text], 'example-scene.json', { type: 'application/json' });
+      const sceneData = await importScene(file);
+      await loadSceneData(sceneData);
+      showToast('Example scene loaded successfully', 'success');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showToast(`Failed to load example: ${errorMessage}`, 'error');
+      console.error('Load example error:', error);
     }
   };
 
@@ -127,7 +156,7 @@ export const Toolbar: FC = () => {
         <GameResControl />
         
         <Button variant="ghost" size="small" onClick={resetCamera}>
-          Reset View
+          Reset View (R)
         </Button>
       </div>
       
@@ -135,6 +164,9 @@ export const Toolbar: FC = () => {
       <div className="flex gap-2 justify-end">
         <Button variant="primary" size="small" onClick={handleImport}>
           Import Scene
+        </Button>
+        <Button variant="primary" size="small" onClick={handleLoadExample}>
+          Load Example
         </Button>
         <Button variant="default" size="small" onClick={handleExport}>
           Export Scene

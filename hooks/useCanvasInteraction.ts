@@ -308,6 +308,12 @@ export function useCanvasInteraction(
     };
     
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if input is focused (user is typing in a field)
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
       // Delete key handling
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selection && selection.layerId && selection.objectId) {

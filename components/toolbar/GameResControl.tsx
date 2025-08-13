@@ -14,7 +14,7 @@ export const GameResControl: FC = () => {
       "group bg-[--panel] px-2 py-1.5 rounded-[10px] border border-[#232a3d] flex gap-1.5 items-center transition-all",
       gameResolution.enabled && "bg-[rgba(122,162,255,0.15)] border-[--accent]"
     )}>
-      <label className="text-[--muted] text-xs">Game Res</label>
+      <label className="text-[--muted] text-xs">Game Res (G)</label>
       <input 
         type="checkbox" 
         checked={gameResolution.enabled}

@@ -210,7 +210,7 @@ export const InspectorPanel: FC = () => {
           }}
           className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition-colors"
         >
-          Delete Object
+          Delete Object (Del)
         </button>
       </div>
     );
