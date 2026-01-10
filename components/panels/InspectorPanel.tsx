@@ -17,6 +17,7 @@ export const InspectorPanel: FC = () => {
   const removeAsset = useEditorStore(state => state.removeAsset);
   const setSelectedAssetId = useEditorStore(state => state.setSelectedAssetId);
   const mode = useEditorStore(state => state.mode);
+  const openAutotileConfigPanel = useEditorStore(state => state.openAutotileConfigPanel);
   const textSettings = useEditorStore(state => state.textSettings);
   const arrowSettings = useEditorStore(state => state.arrowSettings);
   const setTextSettings = useEditorStore(state => state.setTextSettings);
@@ -66,6 +67,12 @@ export const InspectorPanel: FC = () => {
               meta: { ...meta, spacing: parseInt(e.target.value) || 0 }
             })}
           />
+          <button
+            onClick={() => openAutotileConfigPanel(selectedAsset.id)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-semibold transition-colors"
+          >
+            Configure Autotile
+          </button>
           <button
             onClick={() => {
               if (confirm(`Delete tileset "${selectedAsset.name}"? This will also remove all tiles using this tileset.`)) {

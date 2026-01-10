@@ -1,4 +1,7 @@
-export type EditorMode = 'select' | 'place' | 'erase' | 'text' | 'arrow';
+export type EditorMode = 'select' | 'place' | 'erase' | 'text' | 'arrow' | 'ground' | 'walls';
+
+// Re-export autotile types for convenience
+export type { AutotileCategory, AutotileTopCategory, AutotileSideCategory, TilesetAutotileConfig, AutotileSourceConfig, WallSideConfig } from '@/lib/autotile/types';
 export type AssetType = 'sprite' | 'tileset';
 export type AssetTab = 'sprite' | 'tileset';
 export type LayerType = 'tile' | 'object';
@@ -35,12 +38,16 @@ export interface SpriteMetadata {
   loop: boolean;
 }
 
+import type { TilesetAutotileConfig as AutotileConfigType } from '@/lib/autotile/types';
+
 export interface TilesetMetadata {
   tileW: number;
   tileH: number;
   margin: number;
   spacing: number;
   cols?: number;
+  // Autotile configuration for this tileset
+  autotileConfig?: AutotileConfigType;
 }
 
 export interface Layer {
@@ -51,9 +58,18 @@ export interface Layer {
   locked: boolean;
 }
 
+import type { AutotileCategory as AutotileCategoryType } from '@/lib/autotile/types';
+
 export interface TileCell {
   tilesetId: string;
   index: number;
+  // For autotile cells, this indicates the category (ground/wallTop/groundSide/wallSide)
+  // null or undefined means it's a regular manually-placed tile
+  autotileCategory?: AutotileCategoryType | null;
+  // For side tiles: the Y coordinate of the parent top tile
+  sideTopY?: number;
+  // For side tiles: depth level (0-3 for groundSide, 0-1 for wallSide)
+  sideLevel?: number;
 }
 
 export interface TileLayer extends Layer {
@@ -155,6 +171,16 @@ export interface DrawingArrow {
   endY: number;
 }
 
+export type AutotileConfigTab = 'ground' | 'wallTop' | 'wallSide' | 'groundSide';
+export type AutotileAssignmentTool = 'rect' | 'cross' | 'single';
+
+export interface AutotileConfigPanelState {
+  isOpen: boolean;
+  tilesetId: string | null;
+  activeTab: AutotileConfigTab;
+  assignmentTool: AutotileAssignmentTool;
+}
+
 export interface EditorState {
   // Editor Settings
   ppu: number;
@@ -197,4 +223,7 @@ export interface EditorState {
   
   // Drawing state
   drawingArrow: DrawingArrow | null;
+
+  // Autotile config panel state
+  autotileConfigPanel: AutotileConfigPanelState;
 }

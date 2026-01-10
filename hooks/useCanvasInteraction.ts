@@ -56,7 +56,8 @@ export function useCanvasInteraction(
     assets: [] as any[],
     textSettings: { fontSize: 16, color: '#FFFFFF' } as any,
     arrowSettings: { color: '#FFFFFF', strokeWidth: 2 } as any,
-    drawingArrow: null as any
+    drawingArrow: null as any,
+    activeTilesetId: null as string | null
   });
   
   const actionsRef = useRef({
@@ -68,7 +69,9 @@ export function useCanvasInteraction(
     setSelection: null as any,
     setPanning: null as any,
     updateObject: null as any,
-    setDrawingArrow: null as any
+    setDrawingArrow: null as any,
+    setAutotile: null as any,
+    eraseAutotile: null as any
   });
   
   // Update refs when state changes
@@ -84,7 +87,8 @@ export function useCanvasInteraction(
   stateRef.current.textSettings = useEditorStore(state => state.textSettings);
   stateRef.current.arrowSettings = useEditorStore(state => state.arrowSettings);
   stateRef.current.drawingArrow = useEditorStore(state => state.drawingArrow);
-  
+  stateRef.current.activeTilesetId = useEditorStore(state => state.activeTilesetId);
+
   actionsRef.current.panCamera = useEditorStore(state => state.panCamera);
   actionsRef.current.zoomCamera = useEditorStore(state => state.zoomCamera);
   actionsRef.current.setTile = useEditorStore(state => state.setTile);
@@ -94,7 +98,9 @@ export function useCanvasInteraction(
   actionsRef.current.setPanning = useEditorStore(state => state.setPanning);
   actionsRef.current.updateObject = useEditorStore(state => state.updateObject);
   actionsRef.current.setDrawingArrow = useEditorStore(state => state.setDrawingArrow);
-  
+  actionsRef.current.setAutotile = useEditorStore(state => state.setAutotile);
+  actionsRef.current.eraseAutotile = useEditorStore(state => state.eraseAutotile);
+
   const removeObject = useEditorStore(state => state.removeObject);
   const selection = useEditorStore(state => state.selection);
 
@@ -128,6 +134,21 @@ export function useCanvasInteraction(
         return;
       }
       
+      // Right-click to erase in ground/walls modes
+      if (e.button === 2) {
+        e.preventDefault();
+        const mode = stateRef.current.mode;
+        if (mode === 'ground' || mode === 'walls') {
+          const tileLayer = stateRef.current.layers.find(l => l.type === 'tile' && l.visible && !l.locked);
+          if (tileLayer) {
+            const gridX = Math.floor(worldPos.x / stateRef.current.ppu);
+            const gridY = Math.floor(worldPos.y / stateRef.current.ppu);
+            actionsRef.current.eraseAutotile(tileLayer.id, gridX, gridY);
+          }
+        }
+        return;
+      }
+
       if (e.button !== 0) return;
       
       switch (stateRef.current.mode) {
@@ -310,7 +331,7 @@ export function useCanvasInteraction(
             console.log('No object layer found');
             return;
           }
-          
+
           // Start drawing arrow
           actionsRef.current.setDrawingArrow({
             startX: worldPos.x,
@@ -320,7 +341,29 @@ export function useCanvasInteraction(
           });
           break;
         }
-        
+
+        case 'ground':
+        case 'walls': {
+          // Autotile placement
+          const tileLayer = stateRef.current.layers.find(l => l.type === 'tile' && l.visible && !l.locked);
+          if (!tileLayer) {
+            console.log('No tile layer found');
+            return;
+          }
+
+          if (!stateRef.current.activeTilesetId) {
+            console.log('No tileset selected');
+            return;
+          }
+
+          const gridX = Math.floor(worldPos.x / stateRef.current.ppu);
+          const gridY = Math.floor(worldPos.y / stateRef.current.ppu);
+
+          const category = stateRef.current.mode === 'ground' ? 'ground' : 'wallTop';
+          actionsRef.current.setAutotile(tileLayer.id, gridX, gridY, stateRef.current.activeTilesetId, category);
+          break;
+        }
+
       }
     };
     
@@ -390,6 +433,9 @@ export function useCanvasInteraction(
           if (tileBrush.tilesetId && tileBrush.indices.length > 0) {
             handleMouseDown(e);
           }
+        } else if (mode === 'ground' || mode === 'walls') {
+          // Continue placing autotiles
+          handleMouseDown(e);
         } else if (mode === 'arrow' && stateRef.current.drawingArrow) {
           // Update arrow end position while dragging
           const worldPos = getWorldPos(e);
@@ -398,6 +444,20 @@ export function useCanvasInteraction(
             endX: worldPos.x,
             endY: worldPos.y
           });
+        }
+      }
+
+      // Continue erasing autotiles on right-click drag
+      if (e.buttons === 2) {
+        const mode = stateRef.current.mode;
+        if (mode === 'ground' || mode === 'walls') {
+          const tileLayer = stateRef.current.layers.find(l => l.type === 'tile' && l.visible && !l.locked);
+          if (tileLayer) {
+            const worldPos = getWorldPos(e);
+            const gridX = Math.floor(worldPos.x / stateRef.current.ppu);
+            const gridY = Math.floor(worldPos.y / stateRef.current.ppu);
+            actionsRef.current.eraseAutotile(tileLayer.id, gridX, gridY);
+          }
         }
       }
     };
@@ -469,14 +529,23 @@ export function useCanvasInteraction(
       }
     };
     
+    // Prevent context menu in ground/walls modes
+    const handleContextMenu = (e: MouseEvent) => {
+      const mode = stateRef.current.mode;
+      if (mode === 'ground' || mode === 'walls') {
+        e.preventDefault();
+      }
+    };
+
     // Prevent default drag behavior
     canvas.style.userSelect = 'none';
     canvas.style.webkitUserSelect = 'none';
-    
+
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('wheel', handleWheel, { passive: false });
+    canvas.addEventListener('contextmenu', handleContextMenu);
     
     // Add keyboard event listener to the document so it works even when canvas isn't focused
     document.addEventListener('keydown', handleKeyDown);
@@ -486,6 +555,7 @@ export function useCanvasInteraction(
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('wheel', handleWheel);
+      canvas.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [getWorldPos, removeObject, selection]); // Dependencies for the effect

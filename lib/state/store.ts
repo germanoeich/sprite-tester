@@ -5,12 +5,12 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { enableMapSet } from 'immer';
 import { assetManager } from '@/lib/utils/assetManager';
 import { saveToLocalStorage } from '@/lib/utils/localStorage';
-import type { 
-  EditorState, 
-  Asset, 
-  Layer, 
-  TileLayer, 
-  ObjectLayer, 
+import type {
+  EditorState,
+  Asset,
+  Layer,
+  TileLayer,
+  ObjectLayer,
   PlacedObject,
   TextPlacedObject,
   ArrowPlacedObject,
@@ -19,8 +19,37 @@ import type {
   Selection,
   DragState,
   TextSettings,
-  ArrowSettings
+  ArrowSettings,
+  AutotileConfigTab,
+  AutotileAssignmentTool,
+  TilesetMetadata,
+  TileCell,
+  AutotileCategory,
+  AutotileSourceConfig
 } from '@/types';
+import { getNeighborPresence, blobMaskFromNeighbors } from '@/lib/autotile/generator';
+import { createDefaultAutotileConfig, createDefaultWallSideConfig, createDefaultGroundSideConfig, validateWallSideTiles, validateGroundSideTiles } from '@/lib/autotile/defaults';
+import { invalidateAtlas } from '@/lib/autotile/atlasCache';
+
+// Helper to get ImageData from HTMLImageElement
+function getImageDataFromImage(img: HTMLImageElement): ImageData {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+import {
+  getSideDepth,
+  getSideCategoryForTop,
+  getSideColumnIndex,
+  getSideTileIndex,
+  shouldBlockSidePlacement,
+  isTopTileAt,
+  GROUND_SIDE_DEPTH,
+  WALL_SIDE_DEPTH
+} from '@/lib/autotile/sides';
 
 // Enable MapSet plugin for Immer to handle Maps and Sets
 enableMapSet();
@@ -93,6 +122,29 @@ interface EditorActions {
   setTile: (layerId: string, x: number, y: number, tilesetId: string, index: number) => void;
   removeTile: (layerId: string, x: number, y: number) => void;
   clearTileLayer: (layerId: string) => void;
+
+  // Autotile config panel actions
+  openAutotileConfigPanel: (tilesetId: string) => void;
+  closeAutotileConfigPanel: () => void;
+  setAutotileConfigTab: (tab: AutotileConfigTab) => void;
+  setAutotileAssignmentTool: (tool: AutotileAssignmentTool) => void;
+
+  // Autotile configuration actions
+  updateAutotileSourceConfig: (
+    tilesetId: string,
+    category: 'ground' | 'wallTop',
+    updates: Partial<AutotileSourceConfig>
+  ) => void;
+  updateAutotileSideConfig: (
+    tilesetId: string,
+    side: 'wallSide' | 'groundSide',
+    rectOrigin: { x: number; y: number }
+  ) => void;
+  initializeAutotileConfig: (tilesetId: string) => void;
+
+  // Autotile placement actions
+  setAutotile: (layerId: string, x: number, y: number, tilesetId: string, category: AutotileCategory) => void;
+  eraseAutotile: (layerId: string, x: number, y: number) => void;
 }
 
 type EditorStore = EditorState & EditorActions;
@@ -181,7 +233,15 @@ const initialState: EditorState = {
   },
   
   // Drawing state
-  drawingArrow: null
+  drawingArrow: null,
+
+  // Autotile config panel state
+  autotileConfigPanel: {
+    isOpen: false,
+    tilesetId: null,
+    activeTab: 'ground',
+    assignmentTool: 'rect'
+  }
 };
 
 export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
@@ -485,6 +545,327 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
         const layer = state.layers.find(l => l.id === layerId) as TileLayer;
         if (layer && layer.type === 'tile') {
           layer.grid.clear();
+        }
+      }),
+
+      // Autotile config panel actions
+      openAutotileConfigPanel: (tilesetId) => set((state) => {
+        state.autotileConfigPanel.isOpen = true;
+        state.autotileConfigPanel.tilesetId = tilesetId;
+        // Also set as active tileset so ground/walls tools use it
+        state.activeTilesetId = tilesetId;
+      }),
+
+      closeAutotileConfigPanel: () => set((state) => {
+        state.autotileConfigPanel.isOpen = false;
+        state.autotileConfigPanel.tilesetId = null;
+      }),
+
+      setAutotileConfigTab: (tab) => set((state) => {
+        state.autotileConfigPanel.activeTab = tab;
+      }),
+
+      setAutotileAssignmentTool: (tool) => set((state) => {
+        state.autotileConfigPanel.assignmentTool = tool;
+      }),
+
+      // Autotile configuration actions
+      updateAutotileSourceConfig: (tilesetId, category, updates) => set((state) => {
+        const asset = state.assets.find(a => a.id === tilesetId);
+        if (!asset || asset.type !== 'tileset') return;
+
+        const meta = asset.meta as TilesetMetadata;
+        if (!meta.autotileConfig) {
+          meta.autotileConfig = createDefaultAutotileConfig();
+        }
+
+        Object.assign(meta.autotileConfig[category], updates);
+        // Invalidate cached atlas since config changed
+        invalidateAtlas(tilesetId, category);
+      }),
+
+      updateAutotileSideConfig: (tilesetId, side, rectOrigin) => set((state) => {
+        const asset = state.assets.find(a => a.id === tilesetId);
+        if (!asset || asset.type !== 'tileset') return;
+
+        const meta = asset.meta as TilesetMetadata;
+        if (!meta.autotileConfig) {
+          meta.autotileConfig = createDefaultAutotileConfig();
+        }
+
+        // Ensure the specific side config exists (for older saved configs)
+        if (!meta.autotileConfig[side]) {
+          if (side === 'wallSide') {
+            meta.autotileConfig.wallSide = createDefaultWallSideConfig();
+          } else {
+            meta.autotileConfig.groundSide = createDefaultGroundSideConfig();
+          }
+        }
+
+        meta.autotileConfig[side].rectOrigin = rectOrigin;
+
+        // Re-validate tiles at new origin to check which have pixel data
+        const img = assetManager.getImage(tilesetId);
+        if (img) {
+          const tileSize = { x: meta.tileW, y: meta.tileH };
+          const imageData = getImageDataFromImage(img);
+
+          if (side === 'wallSide') {
+            meta.autotileConfig.wallSide.validTiles = validateWallSideTiles(
+              imageData,
+              meta.autotileConfig.wallSide,
+              tileSize
+            );
+          } else {
+            meta.autotileConfig.groundSide.validTiles = validateGroundSideTiles(
+              imageData,
+              meta.autotileConfig.groundSide,
+              tileSize
+            );
+          }
+        }
+      }),
+
+      initializeAutotileConfig: (tilesetId) => set((state) => {
+        const asset = state.assets.find(a => a.id === tilesetId);
+        if (!asset || asset.type !== 'tileset') return;
+
+        const meta = asset.meta as TilesetMetadata;
+        if (!meta.autotileConfig) {
+          meta.autotileConfig = createDefaultAutotileConfig();
+        } else {
+          // Ensure all configs have required fields (for older saved configs)
+          if (!meta.autotileConfig.wallSide) {
+            meta.autotileConfig.wallSide = createDefaultWallSideConfig();
+          }
+          if (!meta.autotileConfig.groundSide) {
+            meta.autotileConfig.groundSide = createDefaultGroundSideConfig();
+          }
+          // Ensure rectSize exists for ground and wallTop (added later)
+          if (meta.autotileConfig.ground && !meta.autotileConfig.ground.rectSize) {
+            meta.autotileConfig.ground.rectSize = { x: 5, y: 4 };
+            // Invalidate cached atlas since it was generated with wrong size
+            invalidateAtlas(tilesetId, 'ground');
+          }
+          if (meta.autotileConfig.wallTop && !meta.autotileConfig.wallTop.rectSize) {
+            meta.autotileConfig.wallTop.rectSize = { x: 5, y: 3 }; // wallTop is 5x3, NOT 5x4
+            // Invalidate cached atlas since it was generated with wrong size
+            invalidateAtlas(tilesetId, 'wallTop');
+          }
+        }
+
+        // Validate side tiles to check which have actual pixel data
+        const img = assetManager.getImage(tilesetId);
+        if (img && meta.autotileConfig) {
+          const tileSize = { x: meta.tileW, y: meta.tileH };
+          const imageData = getImageDataFromImage(img);
+
+          // Validate wall side tiles (5x2 grid)
+          if (meta.autotileConfig.wallSide) {
+            meta.autotileConfig.wallSide.validTiles = validateWallSideTiles(
+              imageData,
+              meta.autotileConfig.wallSide,
+              tileSize
+            );
+          }
+
+          // Validate ground side tiles (5x4 grid)
+          if (meta.autotileConfig.groundSide) {
+            meta.autotileConfig.groundSide.validTiles = validateGroundSideTiles(
+              imageData,
+              meta.autotileConfig.groundSide,
+              tileSize
+            );
+          }
+        }
+      }),
+
+      // Autotile placement actions
+      setAutotile: (layerId, x, y, tilesetId, category) => set((state) => {
+        const layer = state.layers.find(l => l.id === layerId) as TileLayer;
+        if (!layer || layer.type !== 'tile') return;
+
+        // Only handle top categories (ground/wallTop) - sides are placed automatically
+        if (category !== 'ground' && category !== 'wallTop') return;
+
+        const tileset = state.assets.find(a => a.id === tilesetId);
+        if (!tileset || tileset.type !== 'tileset') return;
+
+        const meta = tileset.meta as TilesetMetadata;
+        const img = assetManager.getImage(tilesetId);
+        if (!img || !meta.autotileConfig) return;
+
+        const tilesetCols = Math.floor((img.width - 2 * meta.margin + meta.spacing) / (meta.tileW + meta.spacing));
+        const sideConfig = category === 'ground' ? meta.autotileConfig.groundSide : meta.autotileConfig.wallSide;
+        const sideCategory = getSideCategoryForTop(category);
+        const sideDepth = getSideDepth(category);
+
+        const key = `${x},${y}`;
+
+        // Set the autotile at this position
+        layer.grid.set(key, {
+          tilesetId,
+          index: 0, // Will be recalculated
+          autotileCategory: category
+        });
+
+        // Recalculate blob mask for this tile and all neighbors
+        const positions = [
+          { x, y },
+          { x: x - 1, y: y - 1 }, { x, y: y - 1 }, { x: x + 1, y: y - 1 },
+          { x: x - 1, y },                          { x: x + 1, y },
+          { x: x - 1, y: y + 1 }, { x, y: y + 1 }, { x: x + 1, y: y + 1 }
+        ];
+
+        for (const pos of positions) {
+          const posKey = `${pos.x},${pos.y}`;
+          const cell = layer.grid.get(posKey);
+
+          if (cell && cell.autotileCategory === category) {
+            const neighbors = getNeighborPresence(layer.grid, pos.x, pos.y, category);
+            const mask = blobMaskFromNeighbors(neighbors);
+            cell.index = mask;
+          }
+        }
+
+        // Place side tiles below the top tile
+        if (sideConfig?.enabled) {
+          const hasLeftNeighbor = isTopTileAt(layer.grid, x - 1, y, category);
+          const hasRightNeighbor = isTopTileAt(layer.grid, x + 1, y, category);
+          const validTiles = sideConfig.validTiles;
+
+          for (let level = 0; level < sideDepth; level++) {
+            const sideY = y + level + 1;
+            const sideKey = `${x},${sideY}`;
+            const existingCell = layer.grid.get(sideKey);
+
+            // Check if we can place here based on override rules
+            if (!shouldBlockSidePlacement(existingCell, sideCategory)) {
+              // Get column with validation and randomization
+              const column = getSideColumnIndex(hasLeftNeighbor, hasRightNeighbor, validTiles, level);
+
+              // Only place if a valid column exists
+              if (column >= 0) {
+                const sideIndex = getSideTileIndex(column, level, sideConfig, tilesetCols);
+                layer.grid.set(sideKey, {
+                  tilesetId,
+                  index: sideIndex,
+                  autotileCategory: sideCategory,
+                  sideTopY: y,
+                  sideLevel: level
+                });
+              }
+            }
+          }
+
+          // Update neighboring columns' side tiles X patterns
+          for (const nx of [x - 1, x + 1]) {
+            if (isTopTileAt(layer.grid, nx, y, category)) {
+              const neighborHasLeft = isTopTileAt(layer.grid, nx - 1, y, category);
+              const neighborHasRight = isTopTileAt(layer.grid, nx + 1, y, category);
+
+              for (let level = 0; level < sideDepth; level++) {
+                const sideY = y + level + 1;
+                const sideKey = `${nx},${sideY}`;
+                const sideCell = layer.grid.get(sideKey);
+
+                // Only update if it's a side tile belonging to this top row
+                if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
+                  // Get column with validation and randomization
+                  const neighborColumn = getSideColumnIndex(neighborHasLeft, neighborHasRight, validTiles, level);
+                  if (neighborColumn >= 0) {
+                    sideCell.index = getSideTileIndex(neighborColumn, level, sideConfig, tilesetCols);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }),
+
+      eraseAutotile: (layerId, x, y) => set((state) => {
+        const layer = state.layers.find(l => l.id === layerId) as TileLayer;
+        if (!layer || layer.type !== 'tile') return;
+
+        const key = `${x},${y}`;
+        const cell = layer.grid.get(key);
+
+        if (!cell || !cell.autotileCategory) return;
+
+        const category = cell.autotileCategory;
+        const tilesetId = cell.tilesetId;
+
+        // Handle erasing top tiles (ground/wallTop) - also remove side tiles
+        if (category === 'ground' || category === 'wallTop') {
+          const tileset = state.assets.find(a => a.id === tilesetId);
+          const meta = tileset?.meta as TilesetMetadata | undefined;
+          const img = assetManager.getImage(tilesetId);
+
+          const sideCategory = getSideCategoryForTop(category);
+          const sideDepth = getSideDepth(category);
+          const sideConfig = category === 'ground' ? meta?.autotileConfig?.groundSide : meta?.autotileConfig?.wallSide;
+          const tilesetCols = img && meta ? Math.floor((img.width - 2 * meta.margin + meta.spacing) / (meta.tileW + meta.spacing)) : 0;
+
+          // Remove the top tile
+          layer.grid.delete(key);
+
+          // Recalculate blob mask for all neighbors
+          const positions = [
+            { x: x - 1, y: y - 1 }, { x, y: y - 1 }, { x: x + 1, y: y - 1 },
+            { x: x - 1, y },                          { x: x + 1, y },
+            { x: x - 1, y: y + 1 }, { x, y: y + 1 }, { x: x + 1, y: y + 1 }
+          ];
+
+          for (const pos of positions) {
+            const posKey = `${pos.x},${pos.y}`;
+            const neighborCell = layer.grid.get(posKey);
+
+            if (neighborCell && neighborCell.autotileCategory === category) {
+              const neighbors = getNeighborPresence(layer.grid, pos.x, pos.y, category);
+              const mask = blobMaskFromNeighbors(neighbors);
+              neighborCell.index = mask;
+            }
+          }
+
+          // Remove side tiles that belonged to this top tile
+          for (let level = 0; level < sideDepth; level++) {
+            const sideY = y + level + 1;
+            const sideKey = `${x},${sideY}`;
+            const sideCell = layer.grid.get(sideKey);
+
+            // Only remove if it's a side tile belonging to this top tile
+            if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
+              layer.grid.delete(sideKey);
+            }
+          }
+
+          // Update neighboring columns' side tiles X patterns
+          if (sideConfig?.enabled && tilesetCols > 0) {
+            const validTiles = sideConfig.validTiles;
+            for (const nx of [x - 1, x + 1]) {
+              if (isTopTileAt(layer.grid, nx, y, category)) {
+                const neighborHasLeft = isTopTileAt(layer.grid, nx - 1, y, category);
+                const neighborHasRight = isTopTileAt(layer.grid, nx + 1, y, category);
+
+                for (let level = 0; level < sideDepth; level++) {
+                  const sideY = y + level + 1;
+                  const sideKey = `${nx},${sideY}`;
+                  const sideCell = layer.grid.get(sideKey);
+
+                  if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
+                    // Get column with validation and randomization
+                    const neighborColumn = getSideColumnIndex(neighborHasLeft, neighborHasRight, validTiles, level);
+                    if (neighborColumn >= 0) {
+                      sideCell.index = getSideTileIndex(neighborColumn, level, sideConfig, tilesetCols);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else if (category === 'groundSide' || category === 'wallSide') {
+          // Erasing a side tile directly - just remove it
+          layer.grid.delete(key);
         }
       })
     }))

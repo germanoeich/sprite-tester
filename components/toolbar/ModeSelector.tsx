@@ -11,6 +11,8 @@ const modes: { value: EditorMode; label: string; key: string }[] = [
   { value: 'erase', label: 'Erase (3)', key: '3' },
   { value: 'text', label: 'Text (4)', key: '4' },
   { value: 'arrow', label: 'Arrow (5)', key: '5' },
+  { value: 'ground', label: 'Ground (6)', key: '6' },
+  { value: 'walls', label: 'Walls (7)', key: '7' },
 ];
 
 export const ModeSelector: FC = () => {

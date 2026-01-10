@@ -29,6 +29,12 @@ export function useKeyboardShortcuts() {
         case '5':
           setMode('arrow');
           break;
+        case '6':
+          setMode('ground');
+          break;
+        case '7':
+          setMode('walls');
+          break;
         case 'g':
         case 'G':
           if (!e.ctrlKey && !e.metaKey) {

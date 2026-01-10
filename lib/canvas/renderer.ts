@@ -1,5 +1,6 @@
-import { Camera, Layer, TileLayer, ObjectLayer, Asset, GameResolution, Selection, EditorMode, TileBrush, TilesetMetadata, PlacedObject, TextPlacedObject, ArrowPlacedObject, SpritePlacedObject, DrawingArrow } from '@/types';
+import { Camera, Layer, TileLayer, ObjectLayer, Asset, GameResolution, Selection, EditorMode, TileBrush, TilesetMetadata, PlacedObject, TextPlacedObject, ArrowPlacedObject, SpritePlacedObject, DrawingArrow, TileCell, AutotileCategory } from '@/types';
 import { assetManager } from '@/lib/utils/assetManager';
+import { getOrGenerateAtlas, getCachedAtlas } from '@/lib/autotile/atlasCache';
 
 export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
@@ -246,39 +247,116 @@ export class CanvasRenderer {
 
   private drawTileLayer(layer: TileLayer) {
     if (layer.grid.size === 0) return;
-    
+
     this.ctx.imageSmoothingEnabled = false;
-    
-    // Group tiles by tileset for efficient rendering
-    const tilesByTileset = new Map<string, Array<{x: number, y: number, index: number}>>();
-    
+
+    // Separate autotiles from regular tiles
+    const regularTilesByTileset = new Map<string, Array<{x: number, y: number, index: number}>>();
+    const autotilesByKey = new Map<string, Array<{x: number, y: number, index: number, tilesetId: string}>>();
+
     layer.grid.forEach((cell, key) => {
       const [x, y] = key.split(',').map(Number);
-      if (!tilesByTileset.has(cell.tilesetId)) {
-        tilesByTileset.set(cell.tilesetId, []);
+
+      if (cell.autotileCategory) {
+        // Group autotiles by tileset+category
+        const autotileKey = `${cell.tilesetId}_${cell.autotileCategory}`;
+        if (!autotilesByKey.has(autotileKey)) {
+          autotilesByKey.set(autotileKey, []);
+        }
+        autotilesByKey.get(autotileKey)!.push({ x, y, index: cell.index, tilesetId: cell.tilesetId });
+      } else {
+        // Regular tiles
+        if (!regularTilesByTileset.has(cell.tilesetId)) {
+          regularTilesByTileset.set(cell.tilesetId, []);
+        }
+        regularTilesByTileset.get(cell.tilesetId)!.push({ x, y, index: cell.index });
       }
-      tilesByTileset.get(cell.tilesetId)!.push({ x, y, index: cell.index });
     });
-    
-    // Render tiles grouped by tileset
-    tilesByTileset.forEach((tiles, tilesetId) => {
+
+    // Render regular tiles grouped by tileset
+    regularTilesByTileset.forEach((tiles, tilesetId) => {
       const tileset = this.assets.find(a => a.id === tilesetId);
       if (!tileset) return;
-      
+
       const img = assetManager.getImage(tileset.id);
       if (!img) return;
-      
+
       const meta = tileset.meta as TilesetMetadata;
       const { tileW, tileH, margin, spacing } = meta;
       const cols = Math.floor((img.width - 2 * margin + spacing) / (tileW + spacing));
-      
+
       tiles.forEach(({ x, y, index }) => {
         const sourceX = margin + (index % cols) * (tileW + spacing);
         const sourceY = margin + Math.floor(index / cols) * (tileH + spacing);
-        
+
         this.ctx.drawImage(
           img,
           sourceX, sourceY, tileW, tileH,
+          x * this.ppu, y * this.ppu, this.ppu, this.ppu
+        );
+      });
+    });
+
+    // Render autotiles from generated atlases (ground/wallTop)
+    // and side tiles directly from tileset (groundSide/wallSide)
+    autotilesByKey.forEach((tiles, autotileKey) => {
+      if (tiles.length === 0) return;
+
+      const [tilesetId, category] = autotileKey.split('_') as [string, AutotileCategory];
+      const tileset = this.assets.find(a => a.id === tilesetId);
+      if (!tileset) return;
+
+      const img = assetManager.getImage(tileset.id);
+      if (!img) return;
+
+      const meta = tileset.meta as TilesetMetadata;
+      if (!meta.autotileConfig) return;
+
+      // Side tiles (groundSide/wallSide) render directly from tileset
+      if (category === 'groundSide' || category === 'wallSide') {
+        const { tileW, tileH, margin, spacing } = meta;
+        const cols = Math.floor((img.width - 2 * margin + spacing) / (tileW + spacing));
+
+        tiles.forEach(({ x, y, index }) => {
+          // index is already the tileset index for side tiles
+          const sourceX = margin + (index % cols) * (tileW + spacing);
+          const sourceY = margin + Math.floor(index / cols) * (tileH + spacing);
+
+          this.ctx.drawImage(
+            img,
+            sourceX, sourceY, tileW, tileH,
+            x * this.ppu, y * this.ppu, this.ppu, this.ppu
+          );
+        });
+        return;
+      }
+
+      // Top tiles (ground/wallTop) use generated blob atlas
+      const config = meta.autotileConfig[category as 'ground' | 'wallTop'];
+      if (!config || !config.enabled) return;
+
+      // Get or generate the atlas
+      const atlas = getOrGenerateAtlas(
+        tilesetId,
+        category as 'ground' | 'wallTop',
+        img,
+        config,
+        { x: meta.tileW, y: meta.tileH }
+      );
+
+      if (!atlas) return;
+
+      const { canvas: atlasCanvas, tileSize, columns } = atlas;
+
+      tiles.forEach(({ x, y, index }) => {
+        // index is the BlobTileType mask - convert to atlas index
+        const atlasIndex = atlas.blobTypeToIndex.get(index) ?? 0;
+        const sourceX = (atlasIndex % columns) * tileSize.x;
+        const sourceY = Math.floor(atlasIndex / columns) * tileSize.y;
+
+        this.ctx.drawImage(
+          atlasCanvas,
+          sourceX, sourceY, tileSize.x, tileSize.y,
           x * this.ppu, y * this.ppu, this.ppu, this.ppu
         );
       });
