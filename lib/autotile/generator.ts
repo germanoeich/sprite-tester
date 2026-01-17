@@ -301,20 +301,47 @@ export function generateTileset(sourceAtlas: ImageData, cfg: TilesetConfig, colu
     return out;
   }
 
-  function generateEdgeVariantsFromSources(required: readonly TileFeatures[], sources: readonly ImageData[]): ImageData[] {
-    const results: ImageData[] = [];
-    for (const src of sources) {
-      const out = new ImageData(cfg.tileSize.x, cfg.tileSize.y);
-      if (fullBase) out.data.set(fullBase.data);
-      for (const feat of required) {
-        const quad = getQuadrant(feat);
-        const r = getQuadrantRect(quad, cfg.tileSize);
-        const section = sliceQuadrant(src, quad, cfg.tileSize);
-        blitImageData(out, section, { x: r.x, y: r.y });
-      }
-      results.push(out);
+  function generateVariantsFromLists(required: readonly TileFeatures[], lists: readonly ImageData[][]): ImageData[] {
+    if (lists.length === 0) return [];
+    for (const list of lists) {
+      if (list.length === 0) return [];
     }
+
+    const results: ImageData[] = [];
+    const current: ImageData[] = new Array(required.length);
+
+    const build = (idx: number) => {
+      if (idx === lists.length) {
+        const out = new ImageData(cfg.tileSize.x, cfg.tileSize.y);
+        if (fullBase) out.data.set(fullBase.data);
+        for (let i = 0; i < required.length; i++) {
+          const feat = required[i];
+          const tex = current[i];
+          if (!tex) continue;
+          const r = getQuadrantRect(getQuadrant(feat), cfg.tileSize);
+          blitImageData(out, tex, { x: r.x, y: r.y });
+        }
+        results.push(out);
+        return;
+      }
+
+      const list = lists[idx];
+      for (let i = 0; i < list.length; i++) {
+        current[idx] = list[i];
+        build(idx + 1);
+      }
+    };
+
+    build(0);
     return results;
+  }
+
+  function generateEdgeVariantsFromSources(required: readonly TileFeatures[], sources: readonly ImageData[]): ImageData[] {
+    const lists = required.map((feat) => {
+      const quad = getQuadrant(feat);
+      return sources.map((src) => sliceQuadrant(src, quad, cfg.tileSize));
+    });
+    return generateVariantsFromLists(required, lists);
   }
 
   function generateTileVariants(required: readonly TileFeatures[]): ImageData[] {
@@ -336,7 +363,7 @@ export function generateTileset(sourceAtlas: ImageData, cfg: TilesetConfig, colu
       return generateEdgeVariantsFromSources(required, sources);
     }
 
-    // General case: cycle through feature lists
+    // General case: build all quadrant combinations
     const lists: ImageData[][] = [];
     for (const feat of required) {
       const list = featureTextures.get(feat);
@@ -344,26 +371,7 @@ export function generateTileset(sourceAtlas: ImageData, cfg: TilesetConfig, colu
       lists.push(list);
     }
 
-    let variantCount = 0;
-    for (const l of lists) variantCount = Math.max(variantCount, l.length);
-
-    const results: ImageData[] = [];
-    for (let i = 0; i < variantCount; i++) {
-      const out = new ImageData(cfg.tileSize.x, cfg.tileSize.y);
-      if (fullBase) out.data.set(fullBase.data);
-
-      for (let j = 0; j < required.length; j++) {
-        const feat = required[j];
-        const list = lists[j];
-        const tex = list[i % list.length];
-        const r = getQuadrantRect(getQuadrant(feat), cfg.tileSize);
-        blitImageData(out, tex, { x: r.x, y: r.y });
-      }
-
-      results.push(out);
-    }
-
-    return results;
+    return generateVariantsFromLists(required, lists);
   }
 
   // 3) Generate blob tiles, then append side tiles

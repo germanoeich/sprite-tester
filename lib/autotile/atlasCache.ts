@@ -9,8 +9,9 @@ interface CachedAtlas {
   canvas: HTMLCanvasElement;
   tileSize: Int2;
   columns: number;
-  // Maps BlobTileType value to first atlas index for that type
-  blobTypeToIndex: Map<number, number>;
+  // Maps BlobTileType value to atlas indices (multiple for variants)
+  blobTypeToIndices: Map<number, number[]>;
+  variantSeed: number;
 }
 
 // Cache key format: `${tilesetId}_${category}`
@@ -40,6 +41,14 @@ function imageDataToCanvas(imageData: ImageData): HTMLCanvasElement {
   return canvas;
 }
 
+function hashStringToSeed(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return hash;
+}
+
 export function getOrGenerateAtlas(
   tilesetId: string,
   category: AutotileTopCategory,
@@ -62,11 +71,11 @@ export function getOrGenerateAtlas(
     const tilesetConfig = autotileSourceToTilesetConfig(config, tileSize);
     const generated = generateTileset(sourceImageData, tilesetConfig, 20);
 
-    // Build blob type to atlas index mapping (use first variant index for each type)
-    const blobTypeToIndex = new Map<number, number>();
+    // Build blob type to atlas index mapping (all variant indices)
+    const blobTypeToIndices = new Map<number, number[]>();
     for (const [blobType, indices] of generated.topIndices.entries()) {
       if (indices.length > 0) {
-        blobTypeToIndex.set(blobType as number, indices[0]);
+        blobTypeToIndices.set(blobType as number, indices);
       }
     }
 
@@ -74,7 +83,8 @@ export function getOrGenerateAtlas(
       canvas: imageDataToCanvas(generated.atlas),
       tileSize: generated.tileSize,
       columns: generated.columns,
-      blobTypeToIndex
+      blobTypeToIndices,
+      variantSeed: hashStringToSeed(key)
     };
 
     atlasCache.set(key, cachedAtlas);

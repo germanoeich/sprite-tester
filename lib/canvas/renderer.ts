@@ -2,6 +2,21 @@ import { Camera, Layer, TileLayer, ObjectLayer, Asset, GameResolution, Selection
 import { assetManager } from '@/lib/utils/assetManager';
 import { getOrGenerateAtlas, getCachedAtlas } from '@/lib/autotile/atlasCache';
 
+function hashTileVariant(x: number, y: number, seed: number): number {
+  let h = seed | 0;
+  h = Math.imul(h ^ (x | 0), 0x9e3779b1);
+  h = Math.imul(h ^ (y | 0), 0x85ebca6b);
+  h ^= h >>> 13;
+  return h >>> 0;
+}
+
+function pickVariantIndex(indices: number[] | undefined, x: number, y: number, seed: number): number {
+  if (!indices || indices.length === 0) return 0;
+  if (indices.length === 1) return indices[0];
+  const h = hashTileVariant(x, y, seed);
+  return indices[h % indices.length];
+}
+
 export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -346,11 +361,11 @@ export class CanvasRenderer {
 
       if (!atlas) return;
 
-      const { canvas: atlasCanvas, tileSize, columns } = atlas;
+      const { canvas: atlasCanvas, tileSize, columns, blobTypeToIndices, variantSeed } = atlas;
 
       tiles.forEach(({ x, y, index }) => {
-        // index is the BlobTileType mask - convert to atlas index
-        const atlasIndex = atlas.blobTypeToIndex.get(index) ?? 0;
+        // index is the BlobTileType mask - convert to atlas index (variant-aware)
+        const atlasIndex = pickVariantIndex(blobTypeToIndices.get(index), x, y, variantSeed);
         const sourceX = (atlasIndex % columns) * tileSize.x;
         const sourceY = Math.floor(atlasIndex / columns) * tileSize.y;
 
