@@ -17,6 +17,11 @@ function pickVariantIndex(indices: number[] | undefined, x: number, y: number, s
   return indices[h % indices.length];
 }
 
+function snapCamera(value: number, scale: number): number {
+  if (scale === 0) return value;
+  return Math.round(value * scale) / scale;
+}
+
 export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -99,8 +104,8 @@ export class CanvasRenderer {
 
   render() {
     const { width, height } = this.canvas;
-    const cssWidth = width / this.dpr;
-    const cssHeight = height / this.dpr;
+    const cssWidth = Math.round(width / this.dpr);
+    const cssHeight = Math.round(height / this.dpr);
 
     // Clear
     this.ctx.clearRect(0, 0, cssWidth, cssHeight);
@@ -108,8 +113,10 @@ export class CanvasRenderer {
     // Save state
     this.ctx.save();
     
-    // Center origin
-    this.ctx.translate(cssWidth / 2, cssHeight / 2);
+    // Center origin, snapped to pixel grid
+    const originX = Math.round(cssWidth / 2);
+    const originY = Math.round(cssHeight / 2);
+    this.ctx.translate(originX, originY);
     
     // Apply camera transform or game viewport
     if (this.gameResolution.enabled) {
@@ -142,11 +149,15 @@ export class CanvasRenderer {
       this.ctx.clip();
       
       // Apply camera panning within the game view
-      this.ctx.translate(-this.camera.x, -this.camera.y);
+      const snappedX = snapCamera(this.camera.x, scale);
+      const snappedY = snapCamera(this.camera.y, scale);
+      this.ctx.translate(-snappedX, -snappedY);
     } else {
       // Normal editor camera
       this.ctx.scale(this.camera.zoom, this.camera.zoom);
-      this.ctx.translate(-this.camera.x, -this.camera.y);
+      const snappedX = snapCamera(this.camera.x, this.camera.zoom);
+      const snappedY = snapCamera(this.camera.y, this.camera.zoom);
+      this.ctx.translate(-snappedX, -snappedY);
     }
     
     // Draw grid (only in editor mode)

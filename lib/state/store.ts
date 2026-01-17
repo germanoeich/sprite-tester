@@ -55,6 +55,12 @@ function areBooleanGridEqual(a?: boolean[][], b?: boolean[][]): boolean {
   }
   return true;
 }
+
+function quantizeZoom(zoom: number, ppu: number): number {
+  if (ppu <= 0) return zoom;
+  const scale = Math.max(1, Math.round(zoom * ppu));
+  return scale / ppu;
+}
 import {
   getSideDepth,
   getSideCategoryForTop,
@@ -426,7 +432,9 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
       
       zoomCamera: (delta, pivotX = 0, pivotY = 0) => set((state) => {
         const oldZoom = state.camera.zoom;
-        const newZoom = Math.min(10, Math.max(0.1, oldZoom * (1 + delta)));
+        const unclamped = oldZoom * (1 + delta);
+        const clamped = Math.min(10, Math.max(0.1, unclamped));
+        const newZoom = quantizeZoom(clamped, state.ppu);
         
         // Adjust camera position to zoom around pivot
         const zoomRatio = newZoom / oldZoom;
@@ -445,7 +453,8 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
       }),
       
       setCameraZoom: (zoom) => set((state) => {
-        state.camera.zoom = zoom;
+        const clamped = Math.min(10, Math.max(0.1, zoom));
+        state.camera.zoom = quantizeZoom(clamped, state.ppu);
       }),
       
       // Selection actions
