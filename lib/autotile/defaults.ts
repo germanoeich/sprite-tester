@@ -162,15 +162,17 @@ export function autotileSourceToTilesetConfig(
 export function validateWallSideTiles(
   imageData: ImageData,
   config: WallSideConfig,
-  tileSize: Int2
+  tileSize: Int2,
+  margin: number,
+  spacing: number
 ): boolean[][] {
   const validTiles: boolean[][] = [];
 
   for (let row = 0; row < 2; row++) {
     validTiles[row] = [];
     for (let col = 0; col < 5; col++) {
-      const tileX = (config.rectOrigin.x + col) * tileSize.x;
-      const tileY = (config.rectOrigin.y + row) * tileSize.y;
+      const tileX = margin + (config.rectOrigin.x + col) * (tileSize.x + spacing);
+      const tileY = margin + (config.rectOrigin.y + row) * (tileSize.y + spacing);
 
       // Check if any pixel in the tile has non-zero alpha
       let hasData = false;
@@ -198,15 +200,17 @@ export function validateWallSideTiles(
 export function validateGroundSideTiles(
   imageData: ImageData,
   config: GroundSideConfig,
-  tileSize: Int2
+  tileSize: Int2,
+  margin: number,
+  spacing: number
 ): boolean[][] {
   const validTiles: boolean[][] = [];
 
   for (let row = 0; row < 4; row++) {
     validTiles[row] = [];
     for (let col = 0; col < 5; col++) {
-      const tileX = (config.rectOrigin.x + col) * tileSize.x;
-      const tileY = (config.rectOrigin.y + row) * tileSize.y;
+      const tileX = margin + (config.rectOrigin.x + col) * (tileSize.x + spacing);
+      const tileY = margin + (config.rectOrigin.y + row) * (tileSize.y + spacing);
 
       // Check if any pixel in the tile has non-zero alpha
       let hasData = false;

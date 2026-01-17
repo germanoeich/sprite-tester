@@ -30,6 +30,19 @@ export function canOverride(
   return CATEGORY_PRIORITY[placing] > CATEGORY_PRIORITY[existing];
 }
 
+export function canPlaceSideTile(
+  existingCell: TileCell | undefined,
+  sideCategory: 'groundSide' | 'wallSide',
+  placingTopY: number
+): boolean {
+  if (!existingCell) return true;
+  if (!existingCell.autotileCategory) return false;
+  if (canOverride(existingCell.autotileCategory, sideCategory)) return true;
+  if (existingCell.autotileCategory !== sideCategory) return false;
+  if (existingCell.sideTopY === undefined) return true;
+  return existingCell.sideTopY <= placingTopY;
+}
+
 /**
  * Get the column index (0-4) for a side tile based on neighboring top tiles
  * 5 columns represent different edge patterns:
@@ -80,7 +93,16 @@ export function getSideColumnIndex(
     }
   }
 
-  // If no valid columns, return -1 to signal no tile should be placed
+  // If no valid columns, fall back to any valid tile in this row
+  if (candidateColumns.length === 0 && validTiles && level !== undefined && level < validTiles.length) {
+    const rowValidation = validTiles[level];
+    if (rowValidation) {
+      candidateColumns = rowValidation
+        .map((isValid, idx) => (isValid ? idx : -1))
+        .filter(idx => idx >= 0);
+    }
+  }
+
   if (candidateColumns.length === 0) {
     return -1;
   }

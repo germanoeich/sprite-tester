@@ -40,12 +40,27 @@ function getImageDataFromImage(img: HTMLImageElement): ImageData {
   ctx.drawImage(img, 0, 0);
   return ctx.getImageData(0, 0, canvas.width, canvas.height);
 }
+
+function areBooleanGridEqual(a?: boolean[][], b?: boolean[][]): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let row = 0; row < a.length; row++) {
+    const rowA = a[row];
+    const rowB = b[row];
+    if (!rowA || !rowB || rowA.length !== rowB.length) return false;
+    for (let col = 0; col < rowA.length; col++) {
+      if (rowA[col] !== rowB[col]) return false;
+    }
+  }
+  return true;
+}
 import {
   getSideDepth,
   getSideCategoryForTop,
   getSideColumnIndex,
   getSideTileIndex,
-  shouldBlockSidePlacement,
+  canPlaceSideTile,
   isTopTileAt,
   GROUND_SIDE_DEPTH,
   WALL_SIDE_DEPTH
@@ -614,13 +629,17 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
             meta.autotileConfig.wallSide.validTiles = validateWallSideTiles(
               imageData,
               meta.autotileConfig.wallSide,
-              tileSize
+              tileSize,
+              meta.margin,
+              meta.spacing
             );
           } else {
             meta.autotileConfig.groundSide.validTiles = validateGroundSideTiles(
               imageData,
               meta.autotileConfig.groundSide,
-              tileSize
+              tileSize,
+              meta.margin,
+              meta.spacing
             );
           }
         }
@@ -631,26 +650,33 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
         if (!asset || asset.type !== 'tileset') return;
 
         const meta = asset.meta as TilesetMetadata;
+        let didChange = false;
+
         if (!meta.autotileConfig) {
           meta.autotileConfig = createDefaultAutotileConfig();
+          didChange = true;
         } else {
           // Ensure all configs have required fields (for older saved configs)
           if (!meta.autotileConfig.wallSide) {
             meta.autotileConfig.wallSide = createDefaultWallSideConfig();
+            didChange = true;
           }
           if (!meta.autotileConfig.groundSide) {
             meta.autotileConfig.groundSide = createDefaultGroundSideConfig();
+            didChange = true;
           }
           // Ensure rectSize exists for ground and wallTop (added later)
           if (meta.autotileConfig.ground && !meta.autotileConfig.ground.rectSize) {
             meta.autotileConfig.ground.rectSize = { x: 5, y: 4 };
             // Invalidate cached atlas since it was generated with wrong size
             invalidateAtlas(tilesetId, 'ground');
+            didChange = true;
           }
           if (meta.autotileConfig.wallTop && !meta.autotileConfig.wallTop.rectSize) {
             meta.autotileConfig.wallTop.rectSize = { x: 5, y: 3 }; // wallTop is 5x3, NOT 5x4
             // Invalidate cached atlas since it was generated with wrong size
             invalidateAtlas(tilesetId, 'wallTop');
+            didChange = true;
           }
         }
 
@@ -662,22 +688,36 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
 
           // Validate wall side tiles (5x2 grid)
           if (meta.autotileConfig.wallSide) {
-            meta.autotileConfig.wallSide.validTiles = validateWallSideTiles(
+            const nextValidTiles = validateWallSideTiles(
               imageData,
               meta.autotileConfig.wallSide,
-              tileSize
+              tileSize,
+              meta.margin,
+              meta.spacing
             );
+            if (!areBooleanGridEqual(meta.autotileConfig.wallSide.validTiles, nextValidTiles)) {
+              meta.autotileConfig.wallSide.validTiles = nextValidTiles;
+              didChange = true;
+            }
           }
 
           // Validate ground side tiles (5x4 grid)
           if (meta.autotileConfig.groundSide) {
-            meta.autotileConfig.groundSide.validTiles = validateGroundSideTiles(
+            const nextValidTiles = validateGroundSideTiles(
               imageData,
               meta.autotileConfig.groundSide,
-              tileSize
+              tileSize,
+              meta.margin,
+              meta.spacing
             );
+            if (!areBooleanGridEqual(meta.autotileConfig.groundSide.validTiles, nextValidTiles)) {
+              meta.autotileConfig.groundSide.validTiles = nextValidTiles;
+              didChange = true;
+            }
           }
         }
+
+        if (!didChange) return;
       }),
 
       // Autotile placement actions
@@ -738,23 +778,25 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
             const sideY = y + level + 1;
             const sideKey = `${x},${sideY}`;
             const existingCell = layer.grid.get(sideKey);
+            const canPlace = canPlaceSideTile(existingCell, sideCategory, y);
+            if (!canPlace) continue;
 
-            // Check if we can place here based on override rules
-            if (!shouldBlockSidePlacement(existingCell, sideCategory)) {
-              // Get column with validation and randomization
-              const column = getSideColumnIndex(hasLeftNeighbor, hasRightNeighbor, validTiles, level);
+            const column = getSideColumnIndex(hasLeftNeighbor, hasRightNeighbor, validTiles, level);
 
-              // Only place if a valid column exists
-              if (column >= 0) {
-                const sideIndex = getSideTileIndex(column, level, sideConfig, tilesetCols);
-                layer.grid.set(sideKey, {
-                  tilesetId,
-                  index: sideIndex,
-                  autotileCategory: sideCategory,
-                  sideTopY: y,
-                  sideLevel: level
-                });
-              }
+            if (column >= 0) {
+              const sideIndex = getSideTileIndex(column, level, sideConfig, tilesetCols);
+              layer.grid.set(sideKey, {
+                tilesetId,
+                index: sideIndex,
+                autotileCategory: sideCategory,
+                sideTopY: y,
+                sideLevel: level
+              });
+            } else if (
+              existingCell?.autotileCategory === sideCategory &&
+              (existingCell.sideTopY === undefined || existingCell.sideTopY <= y)
+            ) {
+              layer.grid.delete(sideKey);
             }
           }
 
@@ -768,14 +810,21 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
                 const sideY = y + level + 1;
                 const sideKey = `${nx},${sideY}`;
                 const sideCell = layer.grid.get(sideKey);
-
-                // Only update if it's a side tile belonging to this top row
-                if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
-                  // Get column with validation and randomization
-                  const neighborColumn = getSideColumnIndex(neighborHasLeft, neighborHasRight, validTiles, level);
-                  if (neighborColumn >= 0) {
+                const neighborColumn = getSideColumnIndex(neighborHasLeft, neighborHasRight, validTiles, level);
+                if (neighborColumn >= 0) {
+                  if (canPlaceSideTile(sideCell, sideCategory, y)) {
+                    layer.grid.set(sideKey, {
+                      tilesetId,
+                      index: getSideTileIndex(neighborColumn, level, sideConfig, tilesetCols),
+                      autotileCategory: sideCategory,
+                      sideTopY: y,
+                      sideLevel: level
+                    });
+                  } else if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
                     sideCell.index = getSideTileIndex(neighborColumn, level, sideConfig, tilesetCols);
                   }
+                } else if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
+                  layer.grid.delete(sideKey);
                 }
               }
             }
@@ -839,6 +888,43 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
             }
           }
 
+          if (sideConfig?.enabled && tilesetCols > 0) {
+            const validTiles = sideConfig.validTiles;
+            const minTopY = y - (sideDepth - 1);
+
+            for (let topY = minTopY; topY < y; topY++) {
+              if (!isTopTileAt(layer.grid, x, topY, category)) continue;
+
+              const hasLeftNeighbor = isTopTileAt(layer.grid, x - 1, topY, category);
+              const hasRightNeighbor = isTopTileAt(layer.grid, x + 1, topY, category);
+
+              for (let level = 0; level < sideDepth; level++) {
+                const sideY = topY + level + 1;
+                if (sideY < y + 1 || sideY > y + sideDepth) continue;
+
+                const sideKey = `${x},${sideY}`;
+                const sideCell = layer.grid.get(sideKey);
+                const column = getSideColumnIndex(hasLeftNeighbor, hasRightNeighbor, validTiles, level);
+
+                if (column >= 0) {
+                  if (canPlaceSideTile(sideCell, sideCategory, topY)) {
+                    layer.grid.set(sideKey, {
+                      tilesetId,
+                      index: getSideTileIndex(column, level, sideConfig, tilesetCols),
+                      autotileCategory: sideCategory,
+                      sideTopY: topY,
+                      sideLevel: level
+                    });
+                  } else if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === topY) {
+                    sideCell.index = getSideTileIndex(column, level, sideConfig, tilesetCols);
+                  }
+                } else if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === topY) {
+                  layer.grid.delete(sideKey);
+                }
+              }
+            }
+          }
+
           // Update neighboring columns' side tiles X patterns
           if (sideConfig?.enabled && tilesetCols > 0) {
             const validTiles = sideConfig.validTiles;
@@ -852,12 +938,21 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
                   const sideKey = `${nx},${sideY}`;
                   const sideCell = layer.grid.get(sideKey);
 
-                  if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
-                    // Get column with validation and randomization
-                    const neighborColumn = getSideColumnIndex(neighborHasLeft, neighborHasRight, validTiles, level);
-                    if (neighborColumn >= 0) {
+                  const neighborColumn = getSideColumnIndex(neighborHasLeft, neighborHasRight, validTiles, level);
+                  if (neighborColumn >= 0) {
+                    if (canPlaceSideTile(sideCell, sideCategory, y)) {
+                      layer.grid.set(sideKey, {
+                        tilesetId,
+                        index: getSideTileIndex(neighborColumn, level, sideConfig, tilesetCols),
+                        autotileCategory: sideCategory,
+                        sideTopY: y,
+                        sideLevel: level
+                      });
+                    } else if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
                       sideCell.index = getSideTileIndex(neighborColumn, level, sideConfig, tilesetCols);
                     }
+                  } else if (sideCell?.autotileCategory === sideCategory && sideCell?.sideTopY === y) {
+                    layer.grid.delete(sideKey);
                   }
                 }
               }
