@@ -33,12 +33,14 @@ export function canOverride(
 export function canPlaceSideTile(
   existingCell: TileCell | undefined,
   sideCategory: 'groundSide' | 'wallSide',
-  placingTopY: number
+  placingTopY: number,
+  placingTilesetId?: string
 ): boolean {
   if (!existingCell) return true;
   if (!existingCell.autotileCategory) return false;
   if (canOverride(existingCell.autotileCategory, sideCategory)) return true;
   if (existingCell.autotileCategory !== sideCategory) return false;
+  if (placingTilesetId && existingCell.tilesetId !== placingTilesetId) return false;
   if (existingCell.sideTopY === undefined) return true;
   return existingCell.sideTopY <= placingTopY;
 }
@@ -145,10 +147,13 @@ export function isTopTileAt(
   grid: Map<string, TileCell>,
   x: number,
   y: number,
-  topCategory: 'ground' | 'wallTop'
+  topCategory: 'ground' | 'wallTop',
+  tilesetId?: string
 ): boolean {
   const cell = grid.get(`${x},${y}`);
-  return cell?.autotileCategory === topCategory;
+  if (cell?.autotileCategory !== topCategory) return false;
+  if (!tilesetId) return true;
+  return cell.tilesetId === tilesetId;
 }
 
 /**

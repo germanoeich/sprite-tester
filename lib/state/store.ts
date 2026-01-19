@@ -771,7 +771,7 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
           const cell = layer.grid.get(posKey);
 
           if (cell && cell.autotileCategory === category) {
-            const neighbors = getNeighborPresence(layer.grid, pos.x, pos.y, category);
+            const neighbors = getNeighborPresence(layer.grid, pos.x, pos.y, category, tilesetId);
             const mask = blobMaskFromNeighbors(neighbors);
             cell.index = mask;
           }
@@ -779,15 +779,15 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
 
         // Place side tiles below the top tile
         if (sideConfig?.enabled) {
-          const hasLeftNeighbor = isTopTileAt(layer.grid, x - 1, y, category);
-          const hasRightNeighbor = isTopTileAt(layer.grid, x + 1, y, category);
+          const hasLeftNeighbor = isTopTileAt(layer.grid, x - 1, y, category, tilesetId);
+          const hasRightNeighbor = isTopTileAt(layer.grid, x + 1, y, category, tilesetId);
           const validTiles = sideConfig.validTiles;
 
           for (let level = 0; level < sideDepth; level++) {
             const sideY = y + level + 1;
             const sideKey = `${x},${sideY}`;
             const existingCell = layer.grid.get(sideKey);
-            const canPlace = canPlaceSideTile(existingCell, sideCategory, y);
+            const canPlace = canPlaceSideTile(existingCell, sideCategory, y, tilesetId);
             if (!canPlace) continue;
 
             const column = getSideColumnIndex(hasLeftNeighbor, hasRightNeighbor, validTiles, level);
@@ -811,9 +811,9 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
 
           // Update neighboring columns' side tiles X patterns
           for (const nx of [x - 1, x + 1]) {
-            if (isTopTileAt(layer.grid, nx, y, category)) {
-              const neighborHasLeft = isTopTileAt(layer.grid, nx - 1, y, category);
-              const neighborHasRight = isTopTileAt(layer.grid, nx + 1, y, category);
+            if (isTopTileAt(layer.grid, nx, y, category, tilesetId)) {
+              const neighborHasLeft = isTopTileAt(layer.grid, nx - 1, y, category, tilesetId);
+              const neighborHasRight = isTopTileAt(layer.grid, nx + 1, y, category, tilesetId);
 
               for (let level = 0; level < sideDepth; level++) {
                 const sideY = y + level + 1;
@@ -821,7 +821,7 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
                 const sideCell = layer.grid.get(sideKey);
                 const neighborColumn = getSideColumnIndex(neighborHasLeft, neighborHasRight, validTiles, level);
                 if (neighborColumn >= 0) {
-                  if (canPlaceSideTile(sideCell, sideCategory, y)) {
+                  if (canPlaceSideTile(sideCell, sideCategory, y, tilesetId)) {
                     layer.grid.set(sideKey, {
                       tilesetId,
                       index: getSideTileIndex(neighborColumn, level, sideConfig, tilesetCols),
@@ -879,11 +879,11 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
             const neighborCell = layer.grid.get(posKey);
 
             if (neighborCell && neighborCell.autotileCategory === category) {
-              const neighbors = getNeighborPresence(layer.grid, pos.x, pos.y, category);
-              const mask = blobMaskFromNeighbors(neighbors);
-              neighborCell.index = mask;
-            }
+            const neighbors = getNeighborPresence(layer.grid, pos.x, pos.y, category, tilesetId);
+            const mask = blobMaskFromNeighbors(neighbors);
+            neighborCell.index = mask;
           }
+        }
 
           // Remove side tiles that belonged to this top tile
           for (let level = 0; level < sideDepth; level++) {
@@ -902,10 +902,10 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
             const minTopY = y - (sideDepth - 1);
 
             for (let topY = minTopY; topY < y; topY++) {
-              if (!isTopTileAt(layer.grid, x, topY, category)) continue;
+              if (!isTopTileAt(layer.grid, x, topY, category, tilesetId)) continue;
 
-              const hasLeftNeighbor = isTopTileAt(layer.grid, x - 1, topY, category);
-              const hasRightNeighbor = isTopTileAt(layer.grid, x + 1, topY, category);
+              const hasLeftNeighbor = isTopTileAt(layer.grid, x - 1, topY, category, tilesetId);
+              const hasRightNeighbor = isTopTileAt(layer.grid, x + 1, topY, category, tilesetId);
 
               for (let level = 0; level < sideDepth; level++) {
                 const sideY = topY + level + 1;
@@ -916,7 +916,7 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
                 const column = getSideColumnIndex(hasLeftNeighbor, hasRightNeighbor, validTiles, level);
 
                 if (column >= 0) {
-                  if (canPlaceSideTile(sideCell, sideCategory, topY)) {
+                  if (canPlaceSideTile(sideCell, sideCategory, topY, tilesetId)) {
                     layer.grid.set(sideKey, {
                       tilesetId,
                       index: getSideTileIndex(column, level, sideConfig, tilesetCols),
@@ -938,9 +938,9 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
           if (sideConfig?.enabled && tilesetCols > 0) {
             const validTiles = sideConfig.validTiles;
             for (const nx of [x - 1, x + 1]) {
-              if (isTopTileAt(layer.grid, nx, y, category)) {
-                const neighborHasLeft = isTopTileAt(layer.grid, nx - 1, y, category);
-                const neighborHasRight = isTopTileAt(layer.grid, nx + 1, y, category);
+              if (isTopTileAt(layer.grid, nx, y, category, tilesetId)) {
+                const neighborHasLeft = isTopTileAt(layer.grid, nx - 1, y, category, tilesetId);
+                const neighborHasRight = isTopTileAt(layer.grid, nx + 1, y, category, tilesetId);
 
                 for (let level = 0; level < sideDepth; level++) {
                   const sideY = y + level + 1;
@@ -949,7 +949,7 @@ export const useEditorStore = create<EditorStore>()(subscribeWithSelector(
 
                   const neighborColumn = getSideColumnIndex(neighborHasLeft, neighborHasRight, validTiles, level);
                   if (neighborColumn >= 0) {
-                    if (canPlaceSideTile(sideCell, sideCategory, y)) {
+                    if (canPlaceSideTile(sideCell, sideCategory, y, tilesetId)) {
                       layer.grid.set(sideKey, {
                         tilesetId,
                         index: getSideTileIndex(neighborColumn, level, sideConfig, tilesetCols),

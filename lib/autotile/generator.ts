@@ -465,14 +465,17 @@ export function getBlobAtlasIndex(blobType: BlobTileType): number {
 
 // Get neighbor presence from a grid at position (x, y)
 export function getNeighborPresence(
-  grid: Map<string, { autotileCategory?: string | null }>,
+  grid: Map<string, { autotileCategory?: string | null; tilesetId?: string }>,
   x: number,
   y: number,
-  category: string
+  category: string,
+  tilesetId?: string
 ): NeighborPresence {
   const hasNeighbor = (dx: number, dy: number): boolean => {
     const cell = grid.get(`${x + dx},${y + dy}`);
-    return cell?.autotileCategory === category;
+    if (cell?.autotileCategory !== category) return false;
+    if (!tilesetId) return true;
+    return cell.tilesetId === tilesetId;
   };
 
   return {
